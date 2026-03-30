@@ -3,28 +3,54 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat AIWA</title>
     <style>
-        body { font-family: sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .chat-container { width: 400px; background: #fff; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); overflow: hidden; display: flex; flex-direction: column; height: 80vh; }
-        .cabecalho { background: #007bff; color: white; padding: 15px; text-align: center; margin: 0; font-size: 1.2rem; }
-        .mensagens { flex: 1; padding: 15px; overflow-y: auto; background: #fafafa; }
-        .input-area { display: flex; padding: 10px; border-top: 1px solid #ddd; background: #fff; }
-        .input-area input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-right: 10px; outline: none; }
-        .input-area button { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; text-align: center; }
+        .box { background: white; max-width: 400px; margin: 50px auto; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        .msg { border: 1px solid #eee; padding: 10px; margin: 5px 0; text-align: left; background: #fafafa; }
     </style>
 </head>
 <body>
-    <div class="chat-container">
-        <h2 class="cabecalho">Chat AIWA</h2>
-        <div class="mensagens">
-            <p style="color: #888; text-align: center; font-size: 0.9em; margin-top: 50%;">Inicie a conversa...</p>
-        </div>
-        <div class="input-area">
-            <input type="text" placeholder="Digite sua mensagem...">
-            <button>Enviar</button>
-        </div>
+
+    <div class="box">
+        <h2>Chat AIWA</h2>
+
+        {% if not sala %}
+            <form method="POST" action="">
+                {% csrf_token %}
+                <p>Para começar, digite seu nome:</p>
+                <input type="text" name="nome" placeholder="Seu nome aqui..." required>
+                <button type="submit">INICIAR ATENDIMENTO</button>
+            </form>
+        {% else %}
+            <div style="background: #e7f3ff; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                <strong>Status:</strong> {{ sala.get_status_display }}<br>
+                <strong>Atendente:</strong> 
+                {% if sala.atendente %} {{ sala.atendente.user.username }} {% else %} Aguardando... {% endif %}
+            </div>
+
+            <div id="chat-window" style="height: 200px; overflow-y: auto; border: 1px solid #ddd; margin-bottom: 10px; padding: 10px;">
+                <p class="msg"><i>Sistema: Olá {{ sala.cliente_nome }}, como podemos ajudar?</i></p>
+            </div>
+
+            <form method="POST" action="">
+                {% csrf_token %}
+                <input type="text" name="mensagem" placeholder="Digite sua mensagem...">
+                <button type="submit">Enviar</button>
+            </form>
+        {% endif %}
     </div>
+    <script>
+        // Atualiza a página a cada 5 segundos automaticamente
+        // (Apenas se houver uma sala aberta)
+        {% if sala or sala_selecionada %}
+        setTimeout(function(){
+            location.reload();
+        }, 5000); 
+        {% endif %}
+    </script>
 </body>
 </html>

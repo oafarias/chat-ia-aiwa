@@ -17,11 +17,13 @@ Including another URLconf
 
 from django.contrib import admin
 from django.urls import path
-from chatconsumidor.views import index
+from chatconsumidor.views import index, sala_chat
 from chatatendente.views import painel
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path('', index, name='index'),
+    path('chat/<int:sala_id>/', sala_chat, name='sala_chat'),
     path('atendimento/', painel, name='painel'),
+    path ('atendimento/<int:sala_id>/', painel, name='painel_sala')
 ]

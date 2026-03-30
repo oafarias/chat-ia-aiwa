@@ -22,10 +22,17 @@
 <body>
     <div class="sidebar">
         <h2>AIWA Panel</h2>
-        <div class="status">Online (0/3)</div>
+        <div class="status">Online</div> 
+
         <div class="chat-list">
-            <div class="chat-item">Cliente #1029</div>
-            <div class="chat-item" style="opacity: 0.5;">Aguardando...</div>
+            {% for s in salas %}
+                <a href="{% url 'painel_sala' s.id %}" style="text-decoration: none; color: inherit;">
+                    <div class="chat-item {% if s.id == sala_selecionada.id %}ativo{% endif %}" 
+                        style="background: {% if s.id == sala_selecionada.id %}#455a64{% else %}#37474f{% endif %};">
+                        <strong>{{ s.cliente_nome }}</strong>
+                    </div>
+                </a>
+            {% endfor %}
         </div>
     </div>
     <div class="main-chat">
@@ -40,5 +47,14 @@
             <button>Responder</button>
         </div>
     </div>
+    <script>
+        // Atualiza a página a cada 5 segundos automaticamente
+        // (Apenas se houver uma sala aberta)
+        {% if sala or sala_selecionada %}
+        setTimeout(function(){
+            location.reload();
+        }, 5000); 
+        {% endif %}
+    </script>
 </body>
 </html>
