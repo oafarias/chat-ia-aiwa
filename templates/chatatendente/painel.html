@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel AIWA - Atendente</title>
+    <style>
+        body { font-family: sans-serif; display: flex; height: 100vh; margin: 0; background: #eceff1; }
+        .sidebar { width: 250px; background: #263238; color: white; padding: 20px; display: flex; flex-direction: column; }
+        .status { background: #4caf50; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 20px; font-weight: bold; }
+        .chat-list { flex: 1; overflow-y: auto; }
+        .chat-item { background: #37474f; padding: 15px; margin-bottom: 10px; border-radius: 5px; cursor: pointer; transition: 0.2s; }
+        .chat-item:hover { background: #455a64; }
+        .main-chat { flex: 1; display: flex; flex-direction: column; background: #fff; }
+        .chat-header { padding: 20px; background: #fff; border-bottom: 1px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .chat-history { flex: 1; padding: 20px; overflow-y: auto; background: #f9f9f9; }
+        .chat-input { padding: 20px; border-top: 1px solid #ddd; display: flex; }
+        .chat-input input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-right: 10px; outline: none; }
+        .chat-input button { padding: 10px 20px; background: #263238; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="sidebar">
+        <h2>AIWA Panel</h2>
+        <div class="status">Online (0/3)</div>
+        <div class="chat-list">
+            <div class="chat-item">Cliente #1029</div>
+            <div class="chat-item" style="opacity: 0.5;">Aguardando...</div>
+        </div>
+    </div>
+    <div class="main-chat">
+        <div class="chat-header">
+            <h3 style="margin: 0;">Atendendo: Cliente #1029</h3>
+        </div>
+        <div class="chat-history">
+            <p style="text-align: center; color: #aaa; margin-top: 20%;">Histórico de mensagens aparecerá aqui.</p>
+        </div>
+        <div class="chat-input">
+            <input type="text" placeholder="Digite sua resposta...">
+            <button>Responder</button>
+        </div>
+    </div>
+</body>
+</html>
