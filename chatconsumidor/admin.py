@@ -15,9 +15,9 @@ class MensagemInline(admin.TabularInline):
 # 2. Registra a Sala (agora "Conversas") com as mensagens embutidas
 @admin.register(SalaDeChat)
 class SalaDeChatAdmin(admin.ModelAdmin):
-    list_display = ('id', 'cliente_nome', 'atendente', 'status', 'criado_em')
+    list_display = ('protocolo', 'cliente_nome', 'atendente', 'status', 'criado_em')
     list_filter = ('status', 'atendente')
-    search_fields = ('cliente_nome',)
+    search_fields = ('protocolo', 'cliente_nome')
     
     # Aqui é onde a mágica acontece:
     inlines = [MensagemInline]

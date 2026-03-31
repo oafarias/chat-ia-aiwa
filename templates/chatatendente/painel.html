@@ -60,6 +60,7 @@
             {% for s in salas %}
                 <a href="{% url 'painel_sala' s.id %}" class="chat-item {% if sala_selecionada and s.id == sala_selecionada.id %}ativo{% endif %}">
                     <strong>{{ s.cliente_nome }}</strong><br>
+                    <small style="color: #aaa;">Prot: {{ s.protocolo }}</small><br>
                     <small style="color: #aaa;">Status: {{ s.get_status_display }}</small>
                 </a>
             {% empty %}
@@ -73,33 +74,42 @@
             <div class="chat-header">
                 <div>
                     <h3 style="margin: 0">A atender {{ sala_selecionada.cliente_nome }}</h3>
-                    <span style="background: #333; padding: 5px 15px; border-radius: 15px; font-size: 0.8rem;">Sala #{{ sala_selecionada.id }}</span>
+                    <span style="background: #333; padding: 5px 15px; border-radius: 15px; font-size: 0.8rem;">Protocolo: {{ sala_selecionada.protocolo }}</span>
                 </div>
-
+                
                 <form action="{% url 'encerrar_chat' sala_selecionada.id %}" method="POST" style="margin: 0;">
                     {% csrf_token %}
-                    <button class="submit" style=background: transparent; border: 1px solid var(--aiwa-red); color: var(--aiwa-red); padding: 8px 15px; border-radius: 15px; cursor: pointer; font-weight: bold; transition: 0.3s;" onmouseover="this.style.background='var(--aiwa-red)'; this.style.color='white';" onmouseout="this.style.background='transparent'; this.style.color='var(--aiwa-red)';">
+                    <button class="submit" style="background: transparent; border: 1px solid var(--aiwa-red); color: var(--aiwa-red); padding: 8px 15px; border-radius: 15px; cursor: pointer; font-weight: bold; transition: 0.3s;" onmouseover="this.style.background='var(--aiwa-red)'; this.style.color='white';" onmouseout="this.style.background='transparent'; this.style.color='var(--aiwa-red)';">
                         Encerrar Chat
                     </button>
                 </form>
             </div>
             
             <div class="chat-history" id="chat-window">
-                </div>
-            
-            <div class="chat-input">
-                <input type="text" id="input-mensagem" placeholder="Escreva a sua resposta..." autocomplete="off">
-                <button type="button" id="btn-enviar">Enviar</button>
+                {% for msg in mensagens %}
+                    {% if msg.remetente_atendente %}
+                        <div class="msg msg-atendente">{{ msg.texto }}</div>
+                    {% else %}
+                        <div class="msg msg-cliente">
+                            <strong style="font-size: 0.8em; color: #aaa;">{{ sala_selecionada.cliente_nome }}</strong><br>
+                            {{ msg.texto }}
+                        </div>
+                    {% endif %}
+                {% endfor %}
             </div>
+            
+            <form class="chat-input" id="form-chat">
+                <input type="text" id="input-mensagem" placeholder="Escreva a sua resposta..." autocomplete="off" name="mensagem">
+                <button type="submit" id="btn-enviar">Enviar</button>
+            </form>
             
             <script>
                 const salaId = "{{ sala_selecionada.id }}";
-                const username = "Atendente AIWA"; 
-                
+                const username = "Atendente AIWA"; // Nome fixo para o sistema identificar
+
                 const chatSocket = new WebSocket(
                     (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
-                    + window.location.host 
-                    + '/ws/chat/' + salaId + '/'
+                    + window.location.host + '/ws/chat/' + salaId + '/'
                 );
 
                 chatSocket.onmessage = function(e) {
@@ -108,10 +118,9 @@
                     
                     const msgDiv = document.createElement('div');
                     
-                    // Se a mensagem for do Atendente, fica vermelha e à direita
                     if (data.username === "Atendente AIWA") {
                         msgDiv.className = 'msg msg-atendente';
-                        msgDiv.innerHTML = `${data.message}`;
+                        msgDiv.innerText = data.message;
                     } else {
                         msgDiv.className = 'msg msg-cliente';
                         msgDiv.innerHTML = `<strong style="font-size: 0.8em; color: #aaa;">${data.username}</strong><br>${data.message}`;
@@ -125,7 +134,7 @@
                     const input = document.querySelector('#input-mensagem');
                     const mensagem = input.value.trim();
 
-                    if (mensagem !== "") {
+                    if (mensagem !== "" && chatSocket.readyState === WebSocket.OPEN) {
                         chatSocket.send(JSON.stringify({
                             'message': mensagem,
                             'username': username
@@ -134,10 +143,10 @@
                     }
                 }
 
-                document.querySelector('#btn-enviar').onclick = enviarMensagem;
-                document.querySelector('#input-mensagem').onkeyup = function(e) {
-                    if (e.keyCode === 13) { enviarMensagem(); }
-                };
+                document.getElementById('form-chat').addEventListener('submit', function(e) {
+                    e.preventDefault(); // Impede o recarregamento da página
+                    enviarMensagem();
+                });
             </script>
         {% else %}
             <div class="empty-state">

@@ -31,7 +31,11 @@
                     </form>
                 </div>
             {% else %}
-                <div class="msg msg-atendente">Olá {{ sala.cliente_nome }}, como podemos ajudar você hoje?</div>
+                <div class="msg msg-atendente">
+                    O seu protocolo para este atendimento é: <strong>{{ sala.protocolo }}</strong>.<br>
+                    Para que possamos seguir com o atendimento, como podemos ajudar o(a) Sr(a). {{ sala.cliente_nome }} hoje?
+                </div>
+                
                 {% endif %}
         </div>
 
@@ -45,60 +49,53 @@
 
     <script>
         const salaId = "{{ sala.id }}";
-        const username = "{{ sala.cliente_nome }}";
+    const username = "{{ sala.cliente_nome|default:'' }}";
 
-        // Conecta ao WebSocket que configuramos no routing.py
+    if (salaId) {
         const chatSocket = new WebSocket(
             (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
-            + window.location.host 
-            + '/ws/chat/' + salaId + '/'
+            + window.location.host + '/ws/chat/' + salaId + '/'
         );
 
-        // O que acontece quando o WebSocket recebe uma mensagem
         chatSocket.onmessage = function(e) {
             const data = JSON.parse(e.data);
             const chatWindow = document.querySelector('#chat-window');
             
-            // Cria o balão da mensagem dinamicamente
             const msgDiv = document.createElement('div');
-            
-            // Lógica de cores: Se o nome for igual ao do cliente, balão vermelho (Aiwa)
             msgDiv.className = (data.username === username) ? 'msg msg-cliente' : 'msg msg-atendente';
             msgDiv.innerText = data.message;
             
             chatWindow.appendChild(msgDiv);
-            
-            // Rola automaticamente para o final da conversa
             chatWindow.scrollTop = chatWindow.scrollHeight;
         };
 
-        // Função para enviar a mensagem
         function enviarMensagem() {
             const input = document.querySelector('#input-mensagem');
+            if (!input) {
+                return;
+            }
+
             const mensagem = input.value.trim();
 
-            if (mensagem !== "") {
+            if (mensagem !== "" && chatSocket.readyState === WebSocket.OPEN) {
                 chatSocket.send(JSON.stringify({
                     'message': mensagem,
                     'username': username
                 }));
-                input.value = ''; // Limpa o campo na hora!
+                input.value = '';
             }
         }
 
-        // Escuta o clique no botão
-        document.querySelector('#btn-enviar').onclick = enviarMensagem;
+        const btnEnviar = document.querySelector('#btn-enviar');
+        const inputMensagem = document.querySelector('#input-mensagem');
 
-        // Também permite enviar ao apertar "Enter"
-        document.querySelector('#input-mensagem').onkeyup = function(e) {
-            if (e.keyCode === 13) { enviarMensagem(); }
-        };
-
-        // Rolar para o fim ao carregar a página
-        window.onload = function() {
-            const chatWindow = document.querySelector('#chat-window');
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-        };
+        if (btnEnviar && inputMensagem) {
+            btnEnviar.onclick = enviarMensagem;
+            inputMensagem.onkeyup = function(e) {
+                if (e.key === 'Enter') { enviarMensagem(); }
+            };
+        }
+    }
     </script>
 </body>
 </html>

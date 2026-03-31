@@ -1,16 +1,19 @@
 import os
 from django.core.asgi import get_asgi_application
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'setup.settings')
+# Inicializa a aplicação HTTP do Django antes de carregar os roteamentos do WebSocket
+django_asgi_app = get_asgi_application()
+
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
-import chatconsumidor.routing # Vamos criar este arquivo
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "setup.settings")
+from chatconsumidor.routing import websocket_urlpatterns
 
 application = ProtocolTypeRouter({
-    "http": get_asgi_application(),
+    "http": django_asgi_app,
     "websocket": AuthMiddlewareStack(
         URLRouter(
-            chatconsumidor.routing.websocket_urlpatterns
+            websocket_urlpatterns
         )
     ),
 })

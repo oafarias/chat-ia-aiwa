@@ -1,5 +1,17 @@
+import random
+from django.utils import timezone
 from django.db import models
 from chatatendente.models import Atendente
+
+def gerar_protocolo():
+    # Loop para garantir unicidade absoluta sem travar o servidor
+    while True:
+        base = timezone.now().strftime('%Y%m%d%H%M%S')
+        sufixo = f"{random.randint(0, 99):02d}" # Gera de 00 a 99
+        protocolo = base + sufixo
+        # Só retorna se o protocolo ainda não existir no banco
+        if not SalaDeChat.objects.filter(protocolo=protocolo).exists():
+            return protocolo
 
 class SalaDeChat(models.Model):
     STATUS_CHOICES = [
@@ -8,13 +20,19 @@ class SalaDeChat(models.Model):
         ('encerrado', 'Encerrado'),
     ]
 
+    protocolo = models.CharField(max_length=16, unique=True, blank=True, null=True)
     cliente_nome = models.CharField(max_length=100)
     atendente = models.ForeignKey(Atendente, on_delete=models.SET_NULL, null=True, blank=True, related_name='salas')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='aguardando')
     criado_em = models.DateTimeField(auto_now_add=True)
 
+    def save(self, *args, **kwargs):
+        if not self.protocolo:
+            self.protocolo = gerar_protocolo()
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Chat: {self.cliente_nome} - {self.status}"
+        return f"{self.protocolo} - {self.cliente_nome}"
 
     class Meta:
         verbose_name="Conversa"
