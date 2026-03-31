@@ -1,0 +1,66 @@
+:root {
+    --aiwa-red: #E30613;
+    --aiwa-dark: #1A1A1A;
+    --aiwa-light: #F4F4F4;
+}
+
+body { 
+    font-family: 'Segoe UI', sans-serif; 
+    background: var(--aiwa-light); 
+    margin: 0; 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+    height: 100vh; 
+}
+
+.chat-container { 
+    width: 100%; 
+    max-width: 450px; 
+    height: 90vh; 
+    background: white; 
+    display: flex; 
+    flex-direction: column; 
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
+    border-radius: 15px; 
+    overflow: hidden; 
+}
+
+.chat-header { 
+    background: var(--aiwa-dark); 
+    color: white; 
+    padding: 15px; 
+    display: flex; 
+    align-items: center; 
+    gap: 12px; 
+    border-bottom: 3px solid var(--aiwa-red); 
+}
+
+.avatar { 
+    width: 45px; 
+    height: 45px; 
+    border-radius: 50%; 
+    border: 2px solid var(--aiwa-red); 
+    object-fit: cover; 
+}
+
+/* Animação para novas mensagens */
+@keyframes slideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.msg { 
+    padding: 10px 15px; 
+    margin: 8px; 
+    border-radius: 15px; 
+    max-width: 80%; 
+    animation: slideIn 0.3s ease-out; 
+}
+
+.msg-atendente { background: #eee; align-self: flex-start; border-bottom-left-radius: 2px; }
+.msg-cliente { background: var(--aiwa-red); color: white; align-self: flex-end; border-bottom-right-radius: 2px; }
+
+.chat-input { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; }
+.chat-input input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 25px; outline: none; }
+.chat-input button { background: var(--aiwa-red); color: white; border: none; padding: 10px 20px; border-radius: 25px; cursor: pointer; font-weight: bold; }

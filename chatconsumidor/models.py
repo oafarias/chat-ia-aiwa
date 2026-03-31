@@ -16,6 +16,10 @@ class SalaDeChat(models.Model):
     def __str__(self):
         return f"Chat: {self.cliente_nome} - {self.status}"
 
+    class Meta:
+        verbose_name="Conversa"
+        verbose_name_plural="Conversas"
+
 class Mensagem(models.Model):
     sala = models.ForeignKey(SalaDeChat, on_delete=models.CASCADE, related_name='mensagens')
     texto = models.TextField()
@@ -25,6 +29,8 @@ class Mensagem(models.Model):
 
     class Meta:
         ordering = ['timestamp']
+        verbose_name = "Mensagem"
+        verbose_name_plural = "Mensagens"
 
 def atribuir_atendente():
     # Busca todos os atendentes online que ainda não atingiram o limite

@@ -1,60 +1,151 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel AIWA - Atendente</title>
+    <title>Painel AIWA - Operação</title>
     <style>
-        body { font-family: sans-serif; display: flex; height: 100vh; margin: 0; background: #eceff1; }
-        .sidebar { width: 250px; background: #263238; color: white; padding: 20px; display: flex; flex-direction: column; }
-        .status { background: #4caf50; padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 20px; font-weight: bold; }
-        .chat-list { flex: 1; overflow-y: auto; }
-        .chat-item { background: #37474f; padding: 15px; margin-bottom: 10px; border-radius: 5px; cursor: pointer; transition: 0.2s; }
-        .chat-item:hover { background: #455a64; }
-        .main-chat { flex: 1; display: flex; flex-direction: column; background: #fff; }
-        .chat-header { padding: 20px; background: #fff; border-bottom: 1px solid #ddd; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-        .chat-history { flex: 1; padding: 20px; overflow-y: auto; background: #f9f9f9; }
-        .chat-input { padding: 20px; border-top: 1px solid #ddd; display: flex; }
-        .chat-input input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 5px; margin-right: 10px; outline: none; }
-        .chat-input button { padding: 10px 20px; background: #263238; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        :root {
+            --aiwa-red: #E30613;
+            --bg-dark: #121212;
+            --bg-panel: #1E1E1E;
+            --text-light: #F4F4F4;
+            --sidebar-bg: #0A0A0A;
+        }
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; display: flex; height: 100vh; background: var(--bg-dark); color: var(--text-light); }
+        
+        /* Barra Lateral */
+        .sidebar { width: 300px; background: var(--sidebar-bg); display: flex; flex-direction: column; border-right: 1px solid #333; }
+        .logo-area { padding: 20px; text-align: center; border-bottom: 2px solid var(--aiwa-red); }
+        .logo-area img { max-height: 25px; }
+        .status-badge { display: inline-block; background: #2e7d32; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-top: 10px; }
+        
+        /* Lista de Chats */
+        .chat-list { flex: 1; overflow-y: auto; padding: 15px; }
+        .chat-item { padding: 15px; margin-bottom: 10px; background: var(--bg-panel); border-radius: 8px; cursor: pointer; text-decoration: none; color: white; display: block; border-left: 4px solid transparent; transition: 0.2s; }
+        .chat-item:hover { background: #2a2a2a; }
+        .chat-item.ativo { border-left-color: var(--aiwa-red); background: #2a2a2a; }
+        
+        /* Chat Principal */
+        .main-chat { flex: 1; display: flex; flex-direction: column; background: var(--bg-dark); }
+        .chat-header { padding: 20px; background: var(--bg-panel); border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+        .chat-history { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        
+        /* Balões de Mensagem */
+        .msg { padding: 12px 18px; border-radius: 15px; max-width: 70%; animation: fadeIn 0.3s ease; line-height: 1.4; }
+        .msg-cliente { background: #333; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .msg-atendente { background: var(--aiwa-red); align-self: flex-end; border-bottom-right-radius: 2px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Área de Input */
+        .chat-input { padding: 20px; background: var(--bg-panel); display: flex; gap: 10px; border-top: 1px solid #333; }
+        .chat-input input { flex: 1; padding: 15px; border-radius: 25px; border: none; background: #333; color: white; outline: none; font-size: 1rem; }
+        .chat-input button { padding: 15px 30px; border-radius: 25px; border: none; background: var(--aiwa-red); color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .chat-input button:hover { background: #b3050f; }
+        
+        /* Estado Vazio */
+        .empty-state { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #666; font-size: 1.2rem; }
     </style>
 </head>
 <body>
-    <div class="sidebar">
-        <h2>AIWA Panel</h2>
-        <div class="status">Online</div> 
 
+    <div class="sidebar">
+        <div class="logo-area">
+            <img src="{% static 'images/logo_aiwa.png' %}" alt="AIWA">
+            <br>
+            <span class="status-badge">ONLINE</span>
+        </div>
         <div class="chat-list">
             {% for s in salas %}
-                <a href="{% url 'painel_sala' s.id %}" style="text-decoration: none; color: inherit;">
-                    <div class="chat-item {% if s.id == sala_selecionada.id %}ativo{% endif %}" 
-                        style="background: {% if s.id == sala_selecionada.id %}#455a64{% else %}#37474f{% endif %};">
-                        <strong>{{ s.cliente_nome }}</strong>
-                    </div>
+                <a href="{% url 'painel_sala' s.id %}" class="chat-item {% if sala_selecionada and s.id == sala_selecionada.id %}ativo{% endif %}">
+                    <strong>{{ s.cliente_nome }}</strong><br>
+                    <small style="color: #aaa;">Status: {{ s.get_status_display }}</small>
                 </a>
+            {% empty %}
+                <p style="text-align: center; color: #666; font-size: 0.9rem;">Sem clientes na fila.</p>
             {% endfor %}
         </div>
     </div>
+
     <div class="main-chat">
-        <div class="chat-header">
-            <h3 style="margin: 0;">Atendendo: Cliente #1029</h3>
-        </div>
-        <div class="chat-history">
-            <p style="text-align: center; color: #aaa; margin-top: 20%;">Histórico de mensagens aparecerá aqui.</p>
-        </div>
-        <div class="chat-input">
-            <input type="text" placeholder="Digite sua resposta...">
-            <button>Responder</button>
-        </div>
-    </div>
-    <script>
-        // Atualiza a página a cada 5 segundos automaticamente
-        // (Apenas se houver uma sala aberta)
-        {% if sala or sala_selecionada %}
-        setTimeout(function(){
-            location.reload();
-        }, 5000); 
+        {% if sala_selecionada %}
+            <div class="chat-header">
+                <div>
+                    <h3 style="margin: 0">A atender {{ sala_selecionada.cliente_nome }}</h3>
+                    <span style="background: #333; padding: 5px 15px; border-radius: 15px; font-size: 0.8rem;">Sala #{{ sala_selecionada.id }}</span>
+                </div>
+
+                <form action="{% url 'encerrar_chat' sala_selecionada.id %}" method="POST" style="margin: 0;">
+                    {% csrf_token %}
+                    <button class="submit" style=background: transparent; border: 1px solid var(--aiwa-red); color: var(--aiwa-red); padding: 8px 15px; border-radius: 15px; cursor: pointer; font-weight: bold; transition: 0.3s;" onmouseover="this.style.background='var(--aiwa-red)'; this.style.color='white';" onmouseout="this.style.background='transparent'; this.style.color='var(--aiwa-red)';">
+                        Encerrar Chat
+                    </button>
+                </form>
+            </div>
+            
+            <div class="chat-history" id="chat-window">
+                </div>
+            
+            <div class="chat-input">
+                <input type="text" id="input-mensagem" placeholder="Escreva a sua resposta..." autocomplete="off">
+                <button type="button" id="btn-enviar">Enviar</button>
+            </div>
+            
+            <script>
+                const salaId = "{{ sala_selecionada.id }}";
+                const username = "Atendente AIWA"; 
+                
+                const chatSocket = new WebSocket(
+                    (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
+                    + window.location.host 
+                    + '/ws/chat/' + salaId + '/'
+                );
+
+                chatSocket.onmessage = function(e) {
+                    const data = JSON.parse(e.data);
+                    const chatWindow = document.querySelector('#chat-window');
+                    
+                    const msgDiv = document.createElement('div');
+                    
+                    // Se a mensagem for do Atendente, fica vermelha e à direita
+                    if (data.username === "Atendente AIWA") {
+                        msgDiv.className = 'msg msg-atendente';
+                        msgDiv.innerHTML = `${data.message}`;
+                    } else {
+                        msgDiv.className = 'msg msg-cliente';
+                        msgDiv.innerHTML = `<strong style="font-size: 0.8em; color: #aaa;">${data.username}</strong><br>${data.message}`;
+                    }
+                    
+                    chatWindow.appendChild(msgDiv);
+                    chatWindow.scrollTop = chatWindow.scrollHeight;
+                };
+
+                function enviarMensagem() {
+                    const input = document.querySelector('#input-mensagem');
+                    const mensagem = input.value.trim();
+
+                    if (mensagem !== "") {
+                        chatSocket.send(JSON.stringify({
+                            'message': mensagem,
+                            'username': username
+                        }));
+                        input.value = '';
+                    }
+                }
+
+                document.querySelector('#btn-enviar').onclick = enviarMensagem;
+                document.querySelector('#input-mensagem').onkeyup = function(e) {
+                    if (e.keyCode === 13) { enviarMensagem(); }
+                };
+            </script>
+        {% else %}
+            <div class="empty-state">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 20px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                Selecione uma conversa ao lado para iniciar.
+            </div>
         {% endif %}
-    </script>
+    </div>
+
 </body>
 </html>

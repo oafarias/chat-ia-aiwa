@@ -3,54 +3,102 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Chat AIWA</title>
-    <style>
-        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; text-align: center; }
-        .box { background: white; max-width: 400px; margin: 50px auto; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { width: 100%; padding: 10px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        button:hover { background: #0056b3; }
-        .msg { border: 1px solid #eee; padding: 10px; margin: 5px 0; text-align: left; background: #fafafa; }
-    </style>
+    <title>Atendimento Aiwa</title>
+    <link rel="stylesheet" href="{% static 'css/chat_consumidor.css' %}">
 </head>
 <body>
-
-    <div class="box">
-        <h2>Chat AIWA</h2>
-
-        {% if not sala %}
-            <form method="POST" action="">
-                {% csrf_token %}
-                <p>Para começar, digite seu nome:</p>
-                <input type="text" name="nome" placeholder="Seu nome aqui..." required>
-                <button type="submit">INICIAR ATENDIMENTO</button>
-            </form>
-        {% else %}
-            <div style="background: #e7f3ff; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
-                <strong>Status:</strong> {{ sala.get_status_display }}<br>
-                <strong>Atendente:</strong> 
-                {% if sala.atendente %} {{ sala.atendente.user.username }} {% else %} Aguardando... {% endif %}
+    <div class="chat-container">
+        <div class="chat-header">
+            <img src="{% static 'images/logo_aiwa.png' %}" alt="Aiwa" style="height: 20px;">
+            <div style="flex: 1; text-align: right;">
+                <span style="font-size: 0.8em; display: block;">Fale conosco</span>
+                <strong>Suporte Aiwa</strong>
             </div>
+            <img src="{% static 'images/japonezinha.png' %}" class="avatar">
+        </div>
 
-            <div id="chat-window" style="height: 200px; overflow-y: auto; border: 1px solid #ddd; margin-bottom: 10px; padding: 10px;">
-                <p class="msg"><i>Sistema: Olá {{ sala.cliente_nome }}, como podemos ajudar?</i></p>
-            </div>
+        <div id="chat-window" style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column;">
+            {% if not sala %}
+                <div style="text-align: center; margin-top: 50px;">
+                    <h3>Bem-vindo à Aiwa!</h3>
+                    <form method="POST">
+                        {% csrf_token %}
+                        <input type="text" name="nome" placeholder="Seu nome..." required 
+                               style="width: 80%; padding: 10px; border-radius: 20px; border: 1px solid #ddd; margin-bottom: 10px;">
+                        <button type="submit" style="background: var(--aiwa-red); color: white; border: none; padding: 10px 30px; border-radius: 20px; cursor: pointer;">
+                            INICIAR CHAT
+                        </button>
+                    </form>
+                </div>
+            {% else %}
+                <div class="msg msg-atendente">Olá {{ sala.cliente_nome }}, como podemos ajudar você hoje?</div>
+                {% endif %}
+        </div>
 
-            <form method="POST" action="">
-                {% csrf_token %}
-                <input type="text" name="mensagem" placeholder="Digite sua mensagem...">
-                <button type="submit">Enviar</button>
-            </form>
+        {% if sala %}
+        <div class="chat-input">
+            <input type="text" id="input-mensagem" placeholder="Digite sua mensagem..." autocomplete="off">
+            <button type="button" id="btn-enviar">Enviar</button>
+        </div>
         {% endif %}
     </div>
+
     <script>
-        // Atualiza a página a cada 5 segundos automaticamente
-        // (Apenas se houver uma sala aberta)
-        {% if sala or sala_selecionada %}
-        setTimeout(function(){
-            location.reload();
-        }, 5000); 
-        {% endif %}
+        const salaId = "{{ sala.id }}";
+        const username = "{{ sala.cliente_nome }}";
+
+        // Conecta ao WebSocket que configuramos no routing.py
+        const chatSocket = new WebSocket(
+            (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
+            + window.location.host 
+            + '/ws/chat/' + salaId + '/'
+        );
+
+        // O que acontece quando o WebSocket recebe uma mensagem
+        chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            const chatWindow = document.querySelector('#chat-window');
+            
+            // Cria o balão da mensagem dinamicamente
+            const msgDiv = document.createElement('div');
+            
+            // Lógica de cores: Se o nome for igual ao do cliente, balão vermelho (Aiwa)
+            msgDiv.className = (data.username === username) ? 'msg msg-cliente' : 'msg msg-atendente';
+            msgDiv.innerText = data.message;
+            
+            chatWindow.appendChild(msgDiv);
+            
+            // Rola automaticamente para o final da conversa
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        };
+
+        // Função para enviar a mensagem
+        function enviarMensagem() {
+            const input = document.querySelector('#input-mensagem');
+            const mensagem = input.value.trim();
+
+            if (mensagem !== "") {
+                chatSocket.send(JSON.stringify({
+                    'message': mensagem,
+                    'username': username
+                }));
+                input.value = ''; // Limpa o campo na hora!
+            }
+        }
+
+        // Escuta o clique no botão
+        document.querySelector('#btn-enviar').onclick = enviarMensagem;
+
+        // Também permite enviar ao apertar "Enter"
+        document.querySelector('#input-mensagem').onkeyup = function(e) {
+            if (e.keyCode === 13) { enviarMensagem(); }
+        };
+
+        // Rolar para o fim ao carregar a página
+        window.onload = function() {
+            const chatWindow = document.querySelector('#chat-window');
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        };
     </script>
 </body>
 </html>
