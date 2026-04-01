@@ -104,40 +104,76 @@
             </form>
             
             <script>
-                const salaId = "{{ sala_selecionada.id }}";
-                const username = "Atendente AIWA"; // Nome fixo para o sistema identificar
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                function playChatSound() {
+                    try {
+                        const osc = audioCtx.createOscillator();
+                        const gainNode = audioCtx.createGain();
+                        osc.connect(gainNode);
+                        gainNode.connect(audioCtx.destination);
+                        osc.type = "sine";
+                        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                        gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                        osc.start();
+                        gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.1);
+                        osc.stop(audioCtx.currentTime + 0.1);
+                    } catch(e) {}
+                }
 
-                const chatSocket = new WebSocket(
+                const salaId = "{{ sala_selecionada.id }}";
+                const username = "{{ request.user.username }}";
+
+                window.chatSocketGlobal = new WebSocket(
                     (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
-                    + window.location.host + '/ws/chat/' + salaId + '/'
+                    + window.location.host + '/ws/chat/' + salaId + '/?tipo=atendente'
                 );
 
-                chatSocket.onmessage = function(e) {
+                window.chatSocketGlobal.onmessage = function(e) {
                     const data = JSON.parse(e.data);
                     const chatWindow = document.querySelector('#chat-window');
+                    if (data.action === 'chat_ended') {
+                        const divError = document.createElement('div');
+                        divError.style = "text-align:center; padding: 10px; color: white; background: #c00; font-weight: bold; margin-bottom: 10px; border-radius: 5px;";
+                        divError.innerText = "Este chat foi finalizado pelo consumidor ou a conexão caiu.";
+                        chatWindow.appendChild(divError);
+                        chatWindow.scrollTop = chatWindow.scrollHeight;
+                        // wait 3 sec then reload list or self
+                        setTimeout(() => { window.location.href = '/atendente/painel/'; }, 3000);
+                        return;
+                    }
                     
                     const msgDiv = document.createElement('div');
                     
-                    if (data.username === "Atendente AIWA") {
+                    if (data.username === username) {
                         msgDiv.className = 'msg msg-atendente';
                         msgDiv.innerText = data.message;
                     } else {
                         msgDiv.className = 'msg msg-cliente';
-                        msgDiv.innerHTML = `<strong style="font-size: 0.8em; color: #aaa;">${data.username}</strong><br>${data.message}`;
+                        const sender = document.createElement('strong');
+                        sender.style.fontSize = '0.8em';
+                        sender.style.color = '#aaa';
+                        sender.innerText = data.username;
+
+                        msgDiv.appendChild(sender);
+                        msgDiv.appendChild(document.createElement('br'));
+                        msgDiv.appendChild(document.createTextNode(data.message));
                     }
                     
                     chatWindow.appendChild(msgDiv);
                     chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                    if (data.username !== username) {
+                        playChatSound();
+                    }
                 };
 
                 function enviarMensagem() {
                     const input = document.querySelector('#input-mensagem');
                     const mensagem = input.value.trim();
 
-                    if (mensagem !== "" && chatSocket.readyState === WebSocket.OPEN) {
-                        chatSocket.send(JSON.stringify({
-                            'message': mensagem,
-                            'username': username
+                    if (mensagem !== "" && window.chatSocketGlobal.readyState === WebSocket.OPEN) {
+                        window.chatSocketGlobal.send(JSON.stringify({
+                            'message': mensagem
                         }));
                         input.value = '';
                     }
@@ -156,5 +192,38 @@
         {% endif %}
     </div>
 
+    <script>
+        // Socket de notificação global para o painel de atendimento
+        const notifSocket = new WebSocket(
+            (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
+            + window.location.host + '/ws/notificacoes/'
+        );
+
+        notifSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            
+            // Se for uma notificação de mensagem para uma sala diferente ou nova
+            if (data.type === 'nova_sala' || data.type === 'nova_mensagem') {
+                if (typeof salaId === 'undefined' || data.sala_id !== salaId) {
+                    if (typeof playChatSound === 'function') {
+                        playChatSound();
+                    } else {
+                        try {
+                            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                            const osc = ctx.createOscillator();
+                            osc.connect(ctx.destination);
+                            osc.frequency.setValueAtTime(880, ctx.currentTime);
+                            osc.start();
+                            osc.stop(ctx.currentTime + 0.1);
+                        } catch(e) {
+                            console.log("AudioContext blocked by browser.");
+                        }
+                    }
+                    // Atualiza a barra lateral forçando recarregamento
+                    setTimeout(() => window.location.reload(), 500);
+                }
+            }
+        };
+    </script>
 </body>
 </html>

@@ -13,8 +13,10 @@ class Atendente(models.Model):
     @property
     def disponivel(self):
         # Essa é a regra de ouro que o roteador vai olhar antes de enviar um chat
-        return self.is_online and self.chats_ativos < self.max_chats
+        ativos = self.salas.filter(status='ativo').count()
+        return self.is_online and ativos < self.max_chats
 
     def __str__(self):
         status = "🟢 Online" if self.is_online else "🔴 Offline"
-        return f"{self.user.username} | {status} | Chats: {self.chats_ativos}/{self.max_chats}"
+        ativos = self.salas.filter(status='ativo').count() if self.pk else 0
+        return f"{self.user.username} | {status} | Chats: {ativos}/{self.max_chats}"

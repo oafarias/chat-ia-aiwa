@@ -23,9 +23,9 @@ from chatatendente.views import painel, encerrar_chat
 urlpatterns = [
     path("admin/", admin.site.urls),
     path('', index, name='index'),
-    path('chat/<int:sala_id>/', sala_chat, name='sala_chat'),
+    path('chat/<uuid:sala_id>/', sala_chat, name='sala_chat'),
     path('atendimento/', painel, name='painel'),
-    path ('atendimento/<int:sala_id>/', painel, name='painel_sala'),
-    path('atendimento/<int:sala_id>/encerrar/', encerrar_chat, name='encerrar_chat')
+    path ('atendimento/<uuid:sala_id>/', painel, name='painel_sala'),
+    path('atendimento/<uuid:sala_id>/encerrar/', encerrar_chat, name='encerrar_chat')
 
 ]

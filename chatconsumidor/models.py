@@ -1,4 +1,5 @@
 import random
+import uuid
 from django.utils import timezone
 from django.db import models
 from chatatendente.models import Atendente
@@ -14,16 +15,26 @@ def gerar_protocolo():
             return protocolo
 
 class SalaDeChat(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
     STATUS_CHOICES = [
         ('aguardando', 'Aguardando Atendente'),
         ('ativo', 'Em Atendimento'),
         ('encerrado', 'Encerrado'),
     ]
 
+    ENCERRADO_POR_CHOICES = [
+        ('atendente', 'Atendente'),
+        ('consumidor', 'Consumidor'),
+        ('rede_atendente', 'Falha de Rede (Atendente)'),
+        ('rede_consumidor', 'Falha de Rede (Consumidor)'),
+    ]
+
     protocolo = models.CharField(max_length=16, unique=True, blank=True, null=True)
     cliente_nome = models.CharField(max_length=100)
     atendente = models.ForeignKey(Atendente, on_delete=models.SET_NULL, null=True, blank=True, related_name='salas')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='aguardando')
+    encerrado_por = models.CharField(max_length=20, choices=ENCERRADO_POR_CHOICES, blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
@@ -58,5 +69,5 @@ def atribuir_atendente():
         return None # Ninguém disponível no momento
     
     # Roteamento simples: pega quem tem MENOS chats ativos no momento (estratégia de equilíbrio)
-    atendente_escolhido = min(atendentes_disponiveis, key=lambda a: a.chats_ativos)
+    atendente_escolhido = min(atendentes_disponiveis, key=lambda a: a.salas.filter(status='ativo').count())
     return atendente_escolhido

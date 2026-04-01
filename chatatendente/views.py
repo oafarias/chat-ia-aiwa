@@ -1,7 +1,9 @@
 from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
 from chatconsumidor.models import SalaDeChat, Mensagem
 from .models import Atendente
 
+@login_required(login_url='/admin/login/')
 def painel(request, sala_id=None):
     perfil = get_object_or_404(Atendente, user=request.user)
     salas_ativas = SalaDeChat.objects.filter(atendente=perfil, status='ativo')
@@ -19,6 +21,7 @@ def painel(request, sala_id=None):
         'mensagens': mensagens
     })
 
+@login_required(login_url='/admin/login/')
 def encerrar_chat(request, sala_id):
     if request.method == "POST":
         perfil = get_object_or_404(Atendente, user=request.user)
@@ -28,11 +31,6 @@ def encerrar_chat(request, sala_id):
             # 1. Muda o status da sala
             sala.status = 'encerrado'
             sala.save()
-            
-            # 2. Libera o atendente para receber novos chats (Regra de Negócio)
-            if perfil.chats_ativos > 0:
-                perfil.chats_ativos -= 1
-                perfil.save()
                 
     # Redireciona de volta para o painel limpo
     return redirect('painel')

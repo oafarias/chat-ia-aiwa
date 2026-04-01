@@ -1,4 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 from .models import SalaDeChat, atribuir_atendente
 
 def index(request):
@@ -19,8 +21,16 @@ def index(request):
         )
 
         if atendente_sorteado:
-            atendente_sorteado.chats_ativos += 1
-            atendente_sorteado.save()
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                'notificacoes',
+                {
+                    'type': 'notify',
+                    'event_type': 'nova_sala',
+                    'message': f"Novo chat de {nova_sala.cliente_nome}",
+                    'sala_id': str(nova_sala.id)
+                }
+            )
 
         return redirect('sala_chat', sala_id=nova_sala.id)
 
@@ -28,4 +38,6 @@ def index(request):
 
 def sala_chat(request, sala_id):
     sala = get_object_or_404(SalaDeChat, id=sala_id)
+    if sala.status == 'encerrado':
+        return render(request, 'chatconsumidor/index.html', {'erro_chat_encerrado': True})
     return render(request, 'chatconsumidor/index.html', {'sala': sala})
