@@ -95,8 +95,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
             precisa_de_ia = await self.verificar_triagem_ia()
             
             if precisa_de_ia:
-                # Lança a IA em segundo plano, liberando a tela na mesma hora
-                asyncio.create_task(self.responder_com_ia(mensagem_texto))
+                # 1. Cria a task da IA em segundo plano
+                task = asyncio.create_task(self.responder_com_ia(mensagem_texto))
+                
+                # 2. Armazena a referência forte para o Python não "matar" a task acidentalmente
+                if not hasattr(self, 'background_tasks'):
+                    self.background_tasks = set()
+                self.background_tasks.add(task)
+                
+                # 3. Remove da lista assim que terminar para liberar a memória
+                task.add_done_callback(self.background_tasks.discard)
+
 
     async def responder_com_ia(self, mensagem_texto):
         from chatai.services import perguntar_a_ia_stream

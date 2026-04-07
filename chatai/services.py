@@ -2,14 +2,19 @@ from .models import ConfiguracaoIA
 from google import genai
 from google.genai import types
 import asyncio
-from asgiref.sync import sync_to_async
+from channels.db import database_sync_to_async
 
+@database_sync_to_async
+def obter_configuracao_ativa():
+    """Isola a chamada síncrona ao banco de dados"""
+    return ConfiguracaoIA.objects.filter(is_active=True).first()
 
 async def perguntar_a_ia_stream(mensagem_usuario):
     """
     Busca a configuração ativa e envia a mensagem para a IA correspondente.
     """
-    config = await sync_to_async(lambda: ConfiguracaoIA.objects.filter(is_active=True).first())()
+    # Usando a nova função extraída de forma limpa
+    config = await obter_configuracao_ativa()
     
     if not config or config.provedor != 'gemini':
         yield "Desculpe, o bot de inteligência artificial está indisponível. 💤"
