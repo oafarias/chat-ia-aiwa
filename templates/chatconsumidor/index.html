@@ -4,17 +4,25 @@
 <head>
     <meta charset="UTF-8">
     <title>Atendimento Aiwa</title>
-    <link rel="stylesheet" href="{% static 'css/chat_consumidor.css' %}">
+    <link rel="icon" href="{% static 'images/favicon.png' %}" type="image/png">
+    <link rel="stylesheet" href="{% static 'css/chat_consumidor.css' %}?v=2">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
     <div class="chat-container">
         <div class="chat-header">
             <img src="{% static 'images/logo_aiwa.png' %}" alt="Aiwa" style="height: 20px;">
-            <div style="flex: 1; text-align: right;">
-                <span style="font-size: 0.8em; display: block;">Fale conosco</span>
-                <strong>Suporte Aiwa</strong>
+            <div style="flex: 1; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+                <div>
+                    <span style="font-size: 0.8em; display: block;">Fale conosco</span>
+                    <strong>Suporte Aiwa</strong>
+                </div>
+                {% if sala and not erro_chat_encerrado %}
+                <button id="btn-finalizar-chat" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 4px 12px; border-radius: 12px; cursor: pointer; font-size: 0.75em; transition: 0.3s;">
+                    Encerrar Chat
+                </button>
+                {% endif %}
             </div>
-            <img src="{% static 'images/japonezinha.png' %}" class="avatar">
         </div>
 
         <div id="chat-window" style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column;">
@@ -29,7 +37,7 @@
                     <h3>Bem-vindo à Aiwa!</h3>
                     <form method="POST">
                         {% csrf_token %}
-                        <input type="text" name="nome" placeholder="Seu nome..." required 
+                        <input type="text" name="nome" placeholder="O seu nome..." required 
                                style="width: 80%; padding: 10px; border-radius: 20px; border: 1px solid #ddd; margin-bottom: 10px;">
                         <button type="submit" style="background: var(--aiwa-red); color: white; border: none; padding: 10px 30px; border-radius: 20px; cursor: pointer;">
                             INICIAR CHAT
@@ -37,122 +45,60 @@
                     </form>
                 </div>
             {% else %}
-                <div class="msg msg-atendente">
-                    O seu protocolo para este atendimento é: <strong>{{ sala.protocolo }}</strong>.<br>
-                    Para que possamos seguir com o atendimento, como podemos ajudar o(a) Sr(a). {{ sala.cliente_nome }} hoje?
-                </div>
-                {% for msg in sala.mensagens.all %}
-                    <div class="msg {% if msg.remetente_atendente %}msg-atendente{% else %}msg-cliente{% endif %}">
-                        {{ msg.texto }}
+                <div class="msg-row msg-row-atendente">
+                    <img src="{% static 'images/japonezinha.png' %}" class="msg-avatar">
+                    <div class="msg-group msg-group-atendente">
+                        <div class="msg msg-atendente">
+                            O seu protocolo para este atendimento é: <strong>{{ sala.protocolo }}</strong>.<br>
+                            Para que possamos seguir com o atendimento, como podemos ajudar o(a) Sr(a). {{ sala.cliente_nome }} hoje?
+                        </div>
+                        <div class="msg-sender">Sistema Aiwa</div>
                     </div>
+                </div>
+
+                {% for msg in sala.mensagens.all %}
+                    {% if msg.remetente_atendente %}
+                        <div class="msg-row msg-row-atendente">
+                            <img src="{% static 'images/japonezinha.png' %}" class="msg-avatar">
+                            <div class="msg-group msg-group-atendente">
+                                <div class="msg msg-atendente markdown-content">{{ msg.texto }}</div>
+                                <div class="msg-sender">{{ msg.remetente_atendente.user.first_name|default:"Assistente" }}</div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="msg-row msg-row-cliente">
+                            <div class="msg-group msg-group-cliente">
+                                <div class="msg msg-cliente markdown-content">{{ msg.texto }}</div>
+                            </div>
+                        </div>
+                    {% endif %}
                 {% endfor %}
-                {% endif %}
+            {% endif %}
         </div>
 
         {% if sala and not erro_chat_encerrado %}
-        <div style="text-align: center; margin-bottom: 5px;">
-            <button id="btn-finalizar-chat" style="background: #ccc; border: 1px solid #999; padding: 5px 15px; border-radius: 10px; cursor: pointer; font-size: 0.8em;">Finalizar Chat</button>
+        <div id="typing-container" class="typing-container">
+            O assistente está a escrever
+            <div class="typing-indicator">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            </div>
         </div>
+        
         <div class="chat-input">
-            <input type="text" id="input-mensagem" placeholder="Digite sua mensagem..." autocomplete="off">
+            <input type="text" id="input-mensagem" placeholder="Digite a sua mensagem..." autocomplete="off">
             <button type="button" id="btn-enviar">Enviar</button>
         </div>
         {% endif %}
     </div>
 
     <script>
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function playChatSound() {
-        try {
-            const osc = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            osc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            osc.type = "sine";
-            osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-            gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
-            osc.start();
-            gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.1);
-            osc.stop(audioCtx.currentTime + 0.1);
-        } catch(e) {}
-    }
-
-        const salaId = "{{ sala.id }}";
-    const username = "{{ sala.cliente_nome|default:'' }}";
-
-    if (salaId && !"{{ erro_chat_encerrado }}") {
-        const chatSocket = new WebSocket(
-            (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
-            + window.location.host + '/ws/chat/' + salaId + '/?tipo=consumidor'
-        );
-
-        chatSocket.onmessage = function(e) {
-            const data = JSON.parse(e.data);
-
-            if (data.action === 'chat_ended') {
-                const msgDiv = document.createElement('div');
-                msgDiv.className = 'msg msg-atendente';
-                msgDiv.style.background = '#ffdada';
-                msgDiv.style.color = '#cc0000';
-                msgDiv.style.fontWeight = 'bold';
-                msgDiv.innerText = "Este chat foi finalizado pelo atendente ou a conexão caiu.";
-                document.querySelector('#chat-window').appendChild(msgDiv);
-                document.querySelector('#chat-window').scrollTop = document.querySelector('#chat-window').scrollHeight;
-                chatSocket.close();
-                setTimeout(() => { window.location.href = '/'; }, 3000);
-                return;
-            }
-
-            const chatWindow = document.querySelector('#chat-window');
-            
-            const msgDiv = document.createElement('div');
-            msgDiv.className = (data.username === username) ? 'msg msg-cliente' : 'msg msg-atendente';
-            msgDiv.innerText = data.message;
-            
-            chatWindow.appendChild(msgDiv);
-            chatWindow.scrollTop = chatWindow.scrollHeight;
-
-            if (data.username !== username) {
-                playChatSound();
-            }
+        window.chatConfig = {
+            salaId: "{{ sala.id|default:'' }}",
+            username: "{{ sala.cliente_nome|default:'' }}",
+            erroEncerrado: "{{ erro_chat_encerrado|yesno:'true,' }}",
+            avatarUrl: "{% static 'images/japonezinha.png' %}"
         };
-
-        function enviarMensagem() {
-            const input = document.querySelector('#input-mensagem');
-            if (!input) {
-                return;
-            }
-
-            const mensagem = input.value.trim();
-
-            if (mensagem !== "" && chatSocket.readyState === WebSocket.OPEN) {
-                chatSocket.send(JSON.stringify({
-                    'message': mensagem
-                }));
-                input.value = '';
-            }
-        }
-
-        const btnEnviar = document.querySelector('#btn-enviar');
-        const inputMensagem = document.querySelector('#input-mensagem');
-
-        if (btnEnviar && inputMensagem) {
-            btnEnviar.onclick = enviarMensagem;
-
-            const btnFinalizar = document.querySelector('#btn-finalizar-chat');
-            if (btnFinalizar) {
-                btnFinalizar.onclick = function() {
-                    if (confirm("Tem certeza que deseja finalizar este atendimento?")) {
-                        chatSocket.send(JSON.stringify({'action': 'close_chat'}));
-                        window.location.href = '/';
-                    }
-                };
-            }
-            inputMensagem.onkeyup = function(e) {
-                if (e.key === 'Enter') { enviarMensagem(); }
-            };
-        }
-    }
     </script>
+    <script src="{% static 'js/chat_consumidor.js' %}"></script>
 </body>
 </html>
