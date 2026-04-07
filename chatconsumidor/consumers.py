@@ -1,8 +1,10 @@
 import json
+import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from .models import SalaDeChat, Mensagem
 from chatatendente.models import Atendente
+from django.contrib.auth.models import User
 
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -87,6 +89,39 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }
         )
 
+        # === NOVA LÓGICA DA IA (TRIAGEM E RESPOSTA) ===
+        # Se remetente_id for None, quem falou foi o consumidor.
+        if identidade['remetente_id'] is None:
+            precisa_de_ia = await self.verificar_triagem_ia()
+            
+            if precisa_de_ia:
+                # Lança a IA em segundo plano, liberando a tela na mesma hora
+                asyncio.create_task(self.responder_com_ia(mensagem_texto))
+
+    async def responder_com_ia(self, mensagem_texto):
+        from chatai.services import perguntar_a_ia_stream
+        
+        # 1. Envia sinal para o frontend mostrar as bolinhas de "digitando..."
+        await self.send(text_data=json.dumps({'action': 'typing_start'}))
+
+        texto_completo = ""
+
+        # 2. Escuta o fluxo contínuo de caracteres
+        async for chunk in perguntar_a_ia_stream(mensagem_texto):
+            texto_completo += chunk
+            # Envia pedaço a pedaço
+            await self.send(text_data=json.dumps({
+                'action': 'stream_chunk',
+                'message': chunk,
+                'username': 'Assistente Virtual'
+            }))
+
+        # 3. Fecha o balão de mensagem no frontend
+        await self.send(text_data=json.dumps({'action': 'stream_end'}))
+        
+        # 4. Salva a versão inteira e consolidada no banco de dados 
+        await self.salvar_mensagem_ia(texto_completo)
+
     async def chat_message(self, event):
         # Envia a mensagem para o WebSocket (Consumidor ou Atendente)
         await self.send(text_data=json.dumps({
@@ -166,6 +201,50 @@ class ChatConsumer(AsyncWebsocketConsumer):
             remetente_atendente=remetente
         )
         return True
+    
+    @database_sync_to_async
+    def verificar_triagem_ia(self):
+        try:
+            # select_related para evitar queries extras ao buscar o username
+            sala = SalaDeChat.objects.select_related('atendente__user').get(id=self.sala_id)
+            
+            # A IA entra em ação se:
+            # 1. A sala ainda não tem atendente (órfã)
+            # 2. OU a sala foi atribuída ao próprio Bot da IA
+            if sala.atendente is None:
+                return True
+                
+            if sala.atendente.user.username == "Assistente_IA":
+                return True
+                
+            return False 
+        except SalaDeChat.DoesNotExist:
+            return False
+
+    @database_sync_to_async
+    def salvar_mensagem_ia(self, texto):
+        try:
+            sala = SalaDeChat.objects.get(id=self.sala_id)
+            
+            # Cria um "Atendente Fantasma" no banco silenciosamente se ele não existir
+            user_bot, _ = User.objects.get_or_create(
+                username="Assistente_IA", 
+                defaults={"first_name": "Assistente Virtual"}
+            )
+            atendente_bot, _ = Atendente.objects.get_or_create(
+                user=user_bot, 
+                defaults={"is_online": True, "max_chats": 9999}
+            )
+            
+            Mensagem.objects.create(
+                sala=sala, 
+                texto=texto, 
+                remetente_atendente=atendente_bot
+            )
+            return user_bot.first_name
+        except Exception as e:
+            print(f"Curto-circuito ao salvar msg da IA: {e}")
+            return "Assistente"
 
 
 class NotificacaoConsumer(AsyncWebsocketConsumer):

@@ -5,14 +5,32 @@
     <meta charset="UTF-8">
     <title>Atendimento Aiwa</title>
     <link rel="stylesheet" href="{% static 'css/chat_consumidor.css' %}">
+    <style>
+        /* Novo estilo para o "A escrever..." fora do balão de chat */
+        .typing-container { display: none; padding: 5px 15px; color: #888; font-size: 0.85em; font-style: italic; align-items: center; gap: 5px; }
+        .typing-indicator .dot { display: inline-block; width: 5px; height: 5px; background-color: #888; border-radius: 50%; margin: 0 2px; animation: bounce 1.4s infinite ease-in-out both; }
+        .typing-indicator .dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator .dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        
+        /* Efeito para o botão de encerrar no cabeçalho */
+        #btn-finalizar-chat:hover { background: white !important; color: var(--aiwa-red) !important; }
+    </style>
 </head>
 <body>
     <div class="chat-container">
         <div class="chat-header">
             <img src="{% static 'images/logo_aiwa.png' %}" alt="Aiwa" style="height: 20px;">
-            <div style="flex: 1; text-align: right;">
-                <span style="font-size: 0.8em; display: block;">Fale conosco</span>
-                <strong>Suporte Aiwa</strong>
+            <div style="flex: 1; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+                <div>
+                    <span style="font-size: 0.8em; display: block;">Fale connosco</span>
+                    <strong>Suporte Aiwa</strong>
+                </div>
+                {% if sala and not erro_chat_encerrado %}
+                <button id="btn-finalizar-chat" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid white; padding: 4px 12px; border-radius: 12px; cursor: pointer; font-size: 0.75em; transition: 0.3s;">
+                    Encerrar Chat
+                </button>
+                {% endif %}
             </div>
             <img src="{% static 'images/japonezinha.png' %}" class="avatar">
         </div>
@@ -29,7 +47,7 @@
                     <h3>Bem-vindo à Aiwa!</h3>
                     <form method="POST">
                         {% csrf_token %}
-                        <input type="text" name="nome" placeholder="Seu nome..." required 
+                        <input type="text" name="nome" placeholder="O seu nome..." required 
                                style="width: 80%; padding: 10px; border-radius: 20px; border: 1px solid #ddd; margin-bottom: 10px;">
                         <button type="submit" style="background: var(--aiwa-red); color: white; border: none; padding: 10px 30px; border-radius: 20px; cursor: pointer;">
                             INICIAR CHAT
@@ -46,15 +64,19 @@
                         {{ msg.texto }}
                     </div>
                 {% endfor %}
-                {% endif %}
+            {% endif %}
         </div>
 
         {% if sala and not erro_chat_encerrado %}
-        <div style="text-align: center; margin-bottom: 5px;">
-            <button id="btn-finalizar-chat" style="background: #ccc; border: 1px solid #999; padding: 5px 15px; border-radius: 10px; cursor: pointer; font-size: 0.8em;">Finalizar Chat</button>
+        <div id="typing-container" class="typing-container">
+            O assistente está a escrever
+            <div class="typing-indicator">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            </div>
         </div>
+        
         <div class="chat-input">
-            <input type="text" id="input-mensagem" placeholder="Digite sua mensagem..." autocomplete="off">
+            <input type="text" id="input-mensagem" placeholder="Digite a sua mensagem..." autocomplete="off">
             <button type="button" id="btn-enviar">Enviar</button>
         </div>
         {% endif %}
@@ -77,7 +99,7 @@
         } catch(e) {}
     }
 
-        const salaId = "{{ sala.id }}";
+    const salaId = "{{ sala.id|default:'' }}";
     const username = "{{ sala.cliente_nome|default:'' }}";
 
     if (salaId && !"{{ erro_chat_encerrado }}") {
@@ -88,6 +110,43 @@
 
         chatSocket.onmessage = function(e) {
             const data = JSON.parse(e.data);
+
+            // --- NOVO CONTROLE DO "A ESCREVER..." ---
+            if (data.action === 'typing_start') {
+                const typingContainer = document.querySelector('#typing-container');
+                if (typingContainer) {
+                    typingContainer.style.display = 'flex';
+                }
+                const chatWindow = document.querySelector('#chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+                return;
+            }
+
+            // --- CONTROLE DO STREAMING ---
+            if (data.action === 'stream_chunk') {
+                // Esconde a animação de escrever
+                const typingContainer = document.querySelector('#typing-container');
+                if (typingContainer) typingContainer.style.display = 'none';
+
+                const chatWindow = document.querySelector('#chat-window');
+                let streamDiv = document.querySelector('.msg-stream');
+                
+                if (!streamDiv) {
+                    streamDiv = document.createElement('div');
+                    streamDiv.className = 'msg msg-atendente msg-stream';
+                    chatWindow.appendChild(streamDiv);
+                }
+                
+                streamDiv.innerHTML += data.message.replace(/\n/g, '<br>');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
+                return; 
+            }
+
+            if (data.action === 'stream_end') {
+                const streamDiv = document.querySelector('.msg-stream');
+                if (streamDiv) streamDiv.classList.remove('msg-stream');
+                return;
+            }
 
             if (data.action === 'chat_ended') {
                 const msgDiv = document.createElement('div');
@@ -104,7 +163,6 @@
             }
 
             const chatWindow = document.querySelector('#chat-window');
-            
             const msgDiv = document.createElement('div');
             msgDiv.className = (data.username === username) ? 'msg msg-cliente' : 'msg msg-atendente';
             msgDiv.innerText = data.message;
@@ -119,16 +177,12 @@
 
         function enviarMensagem() {
             const input = document.querySelector('#input-mensagem');
-            if (!input) {
-                return;
-            }
+            if (!input) return;
 
             const mensagem = input.value.trim();
 
             if (mensagem !== "" && chatSocket.readyState === WebSocket.OPEN) {
-                chatSocket.send(JSON.stringify({
-                    'message': mensagem
-                }));
+                chatSocket.send(JSON.stringify({ 'message': mensagem }));
                 input.value = '';
             }
         }
@@ -142,7 +196,7 @@
             const btnFinalizar = document.querySelector('#btn-finalizar-chat');
             if (btnFinalizar) {
                 btnFinalizar.onclick = function() {
-                    if (confirm("Tem certeza que deseja finalizar este atendimento?")) {
+                    if (confirm("Tem a certeza que deseja finalizar este atendimento?")) {
                         chatSocket.send(JSON.stringify({'action': 'close_chat'}));
                         window.location.href = '/';
                     }
