@@ -90,45 +90,35 @@ class ChatConsumer(AsyncWebsocketConsumer):
         )
 
         # === NOVA LÓGICA DA IA (TRIAGEM E RESPOSTA) ===
-        # Se remetente_id for None, quem falou foi o consumidor.
         if identidade['remetente_id'] is None:
             precisa_de_ia = await self.verificar_triagem_ia()
             
             if precisa_de_ia:
-                # 1. Cria a task da IA em segundo plano
-                task = asyncio.create_task(self.responder_com_ia(mensagem_texto))
+                # Agora passamos APENAS a sala_id
+                task = asyncio.create_task(self.responder_com_ia(self.sala_id))
                 
-                # 2. Armazena a referência forte para o Python não "matar" a task acidentalmente
                 if not hasattr(self, 'background_tasks'):
                     self.background_tasks = set()
                 self.background_tasks.add(task)
-                
-                # 3. Remove da lista assim que terminar para liberar a memória
                 task.add_done_callback(self.background_tasks.discard)
 
 
-    async def responder_com_ia(self, mensagem_texto):
+    async def responder_com_ia(self, sala_id):
         from chatai.services import perguntar_a_ia_stream
         
-        # 1. Envia sinal para o frontend mostrar as bolinhas de "digitando..."
         await self.send(text_data=json.dumps({'action': 'typing_start'}))
-
         texto_completo = ""
 
-        # 2. Escuta o fluxo contínuo de caracteres
-        async for chunk in perguntar_a_ia_stream(mensagem_texto):
+        # O serviço agora lê o banco e se vira sozinho
+        async for chunk in perguntar_a_ia_stream(sala_id):
             texto_completo += chunk
-            # Envia pedaço a pedaço
             await self.send(text_data=json.dumps({
                 'action': 'stream_chunk',
                 'message': chunk,
                 'username': 'Assistente Virtual'
             }))
 
-        # 3. Fecha o balão de mensagem no frontend
         await self.send(text_data=json.dumps({'action': 'stream_end'}))
-        
-        # 4. Salva a versão inteira e consolidada no banco de dados 
         await self.salvar_mensagem_ia(texto_completo)
 
     async def chat_message(self, event):
