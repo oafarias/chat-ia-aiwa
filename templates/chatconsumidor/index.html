@@ -5,16 +5,34 @@
     <meta charset="UTF-8">
     <title>Atendimento Aiwa</title>
     <link rel="stylesheet" href="{% static 'css/chat_consumidor.css' %}">
+    
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    
     <style>
-        /* Novo estilo para o "A escrever..." fora do balão de chat */
         .typing-container { display: none; padding: 5px 15px; color: #888; font-size: 0.85em; font-style: italic; align-items: center; gap: 5px; }
         .typing-indicator .dot { display: inline-block; width: 5px; height: 5px; background-color: #888; border-radius: 50%; margin: 0 2px; animation: bounce 1.4s infinite ease-in-out both; }
         .typing-indicator .dot:nth-child(1) { animation-delay: -0.32s; }
         .typing-indicator .dot:nth-child(2) { animation-delay: -0.16s; }
         @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
-        
-        /* Efeito para o botão de encerrar no cabeçalho */
         #btn-finalizar-chat:hover { background: white !important; color: var(--aiwa-red) !important; }
+
+        .msg-row { display: flex; width: 100%; margin-bottom: 15px; }
+        .msg-row-atendente { justify-content: flex-start; }
+        .msg-row-cliente { justify-content: flex-end; }
+        .msg-avatar { width: 35px; height: 35px; border-radius: 50%; margin-right: 8px; align-self: flex-end; border: 2px solid var(--aiwa-red); object-fit: cover; }
+        .msg-group { display: flex; flex-direction: column; max-width: 75%; }
+        .msg-group-cliente { align-items: flex-end; }
+        .msg-group-atendente { align-items: flex-start; }
+        .msg-group .msg { margin: 0; }
+        .msg-sender { font-size: 0.7em; color: #999; margin-top: 4px; padding: 0 4px; font-weight: bold; text-transform: uppercase; }
+
+        /* Ajustes para o conteúdo formatado em Markdown não estourar os balões */
+        .msg p { margin: 0 0 8px 0; }
+        .msg p:last-child { margin: 0; }
+        .msg ul, .msg ol { margin: 8px 0; padding-left: 20px; }
+        .msg li { margin-bottom: 4px; }
+        .msg strong { font-weight: 800; }
+        .msg code { background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 4px; font-family: monospace; }
     </style>
 </head>
 <body>
@@ -32,7 +50,6 @@
                 </button>
                 {% endif %}
             </div>
-            <img src="{% static 'images/japonezinha.png' %}" class="avatar">
         </div>
 
         <div id="chat-window" style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column;">
@@ -55,14 +72,33 @@
                     </form>
                 </div>
             {% else %}
-                <div class="msg msg-atendente">
-                    O seu protocolo para este atendimento é: <strong>{{ sala.protocolo }}</strong>.<br>
-                    Para que possamos seguir com o atendimento, como podemos ajudar o(a) Sr(a). {{ sala.cliente_nome }} hoje?
-                </div>
-                {% for msg in sala.mensagens.all %}
-                    <div class="msg {% if msg.remetente_atendente %}msg-atendente{% else %}msg-cliente{% endif %}">
-                        {{ msg.texto }}
+                <div class="msg-row msg-row-atendente">
+                    <img src="{% static 'images/japonezinha.png' %}" class="msg-avatar">
+                    <div class="msg-group msg-group-atendente">
+                        <div class="msg msg-atendente">
+                            O seu protocolo para este atendimento é: <strong>{{ sala.protocolo }}</strong>.<br>
+                            Para que possamos seguir com o atendimento, como podemos ajudar o(a) Sr(a). {{ sala.cliente_nome }} hoje?
+                        </div>
+                        <div class="msg-sender">Sistema Aiwa</div>
                     </div>
+                </div>
+
+                {% for msg in sala.mensagens.all %}
+                    {% if msg.remetente_atendente %}
+                        <div class="msg-row msg-row-atendente">
+                            <img src="{% static 'images/japonezinha.png' %}" class="msg-avatar">
+                            <div class="msg-group msg-group-atendente">
+                                <div class="msg msg-atendente markdown-content">{{ msg.texto }}</div>
+                                <div class="msg-sender">{{ msg.remetente_atendente.user.first_name|default:"Assistente" }}</div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="msg-row msg-row-cliente">
+                            <div class="msg-group msg-group-cliente">
+                                <div class="msg msg-cliente markdown-content">{{ msg.texto }}</div>
+                            </div>
+                        </div>
+                    {% endif %}
                 {% endfor %}
             {% endif %}
         </div>
@@ -83,6 +119,18 @@
     </div>
 
     <script>
+    // Configura o Marked para converter \n em <br> nativamente
+    marked.setOptions({ breaks: true });
+
+    // Renderiza o markdown do histórico ao carregar a página
+    document.addEventListener("DOMContentLoaded", () => {
+        document.querySelectorAll('.markdown-content').forEach(el => {
+            el.innerHTML = marked.parse(el.textContent);
+        });
+        const chatWindow = document.querySelector('#chat-window');
+        if (chatWindow) chatWindow.scrollTop = chatWindow.scrollHeight;
+    });
+
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playChatSound() {
         try {
@@ -110,64 +158,97 @@
 
         chatSocket.onmessage = function(e) {
             const data = JSON.parse(e.data);
+            const chatWindow = document.querySelector('#chat-window');
 
-            // --- NOVO CONTROLE DO "A ESCREVER..." ---
             if (data.action === 'typing_start') {
                 const typingContainer = document.querySelector('#typing-container');
-                if (typingContainer) {
-                    typingContainer.style.display = 'flex';
-                }
-                const chatWindow = document.querySelector('#chat-window');
+                if (typingContainer) typingContainer.style.display = 'flex';
                 chatWindow.scrollTop = chatWindow.scrollHeight;
                 return;
             }
 
-            // --- CONTROLE DO STREAMING ---
             if (data.action === 'stream_chunk') {
-                // Esconde a animação de escrever
                 const typingContainer = document.querySelector('#typing-container');
                 if (typingContainer) typingContainer.style.display = 'none';
 
-                const chatWindow = document.querySelector('#chat-window');
-                let streamDiv = document.querySelector('.msg-stream');
+                let streamRow = document.querySelector('.stream-row');
                 
-                if (!streamDiv) {
-                    streamDiv = document.createElement('div');
-                    streamDiv.className = 'msg msg-atendente msg-stream';
-                    chatWindow.appendChild(streamDiv);
+                if (!streamRow) {
+                    streamRow = document.createElement('div');
+                    streamRow.className = 'msg-row msg-row-atendente stream-row';
+                    // Armazena o texto cru no dataset para o marked processar blocos corretamente
+                    streamRow.dataset.rawText = ""; 
+                    streamRow.innerHTML = `
+                        <img src="{% static 'images/japonezinha.png' %}" class="msg-avatar">
+                        <div class="msg-group msg-group-atendente">
+                            <div class="msg msg-atendente msg-stream"></div>
+                            <div class="msg-sender">${data.username}</div>
+                        </div>
+                    `;
+                    chatWindow.appendChild(streamRow);
                 }
                 
-                streamDiv.innerHTML += data.message.replace(/\n/g, '<br>');
+                let streamDiv = streamRow.querySelector('.msg-stream');
+                streamRow.dataset.rawText += data.message;
+                // Converte tudo usando o marked em tempo real
+                streamDiv.innerHTML = marked.parse(streamRow.dataset.rawText);
                 chatWindow.scrollTop = chatWindow.scrollHeight;
                 return; 
             }
 
             if (data.action === 'stream_end') {
-                const streamDiv = document.querySelector('.msg-stream');
-                if (streamDiv) streamDiv.classList.remove('msg-stream');
+                const streamRow = document.querySelector('.stream-row');
+                if (streamRow) {
+                    streamRow.classList.remove('stream-row');
+                    const streamDiv = streamRow.querySelector('.msg-stream');
+                    if (streamDiv) streamDiv.classList.remove('msg-stream');
+                }
                 return;
             }
 
             if (data.action === 'chat_ended') {
-                const msgDiv = document.createElement('div');
-                msgDiv.className = 'msg msg-atendente';
-                msgDiv.style.background = '#ffdada';
-                msgDiv.style.color = '#cc0000';
-                msgDiv.style.fontWeight = 'bold';
-                msgDiv.innerText = "Este chat foi finalizado pelo atendente ou a conexão caiu.";
-                document.querySelector('#chat-window').appendChild(msgDiv);
-                document.querySelector('#chat-window').scrollTop = document.querySelector('#chat-window').scrollHeight;
+                const msgRow = document.createElement('div');
+                msgRow.className = 'msg-row msg-row-atendente';
+                msgRow.innerHTML = `
+                    <img src="{% static 'images/japonezinha.png' %}" class="msg-avatar">
+                    <div class="msg-group msg-group-atendente">
+                        <div class="msg msg-atendente" style="background: #ffdada; color: #cc0000; font-weight: bold;">
+                            Este chat foi finalizado pelo atendente ou a conexão caiu.
+                        </div>
+                        <div class="msg-sender">Sistema</div>
+                    </div>
+                `;
+                chatWindow.appendChild(msgRow);
+                chatWindow.scrollTop = chatWindow.scrollHeight;
                 chatSocket.close();
                 setTimeout(() => { window.location.href = '/'; }, 3000);
                 return;
             }
 
-            const chatWindow = document.querySelector('#chat-window');
-            const msgDiv = document.createElement('div');
-            msgDiv.className = (data.username === username) ? 'msg msg-cliente' : 'msg msg-atendente';
-            msgDiv.innerText = data.message;
+            const msgRow = document.createElement('div');
             
-            chatWindow.appendChild(msgDiv);
+            if (data.username === username) {
+                msgRow.className = 'msg-row msg-row-cliente';
+                msgRow.innerHTML = `
+                    <div class="msg-group msg-group-cliente">
+                        <div class="msg msg-cliente"></div>
+                    </div>
+                `;
+                // Para mensagens normais disparadas no socket
+                msgRow.querySelector('.msg').innerHTML = marked.parse(data.message);
+            } else {
+                msgRow.className = 'msg-row msg-row-atendente';
+                msgRow.innerHTML = `
+                    <img src="{% static 'images/japonezinha.png' %}" class="msg-avatar">
+                    <div class="msg-group msg-group-atendente">
+                        <div class="msg msg-atendente"></div>
+                        <div class="msg-sender">${data.username}</div>
+                    </div>
+                `;
+                msgRow.querySelector('.msg').innerHTML = marked.parse(data.message);
+            }
+            
+            chatWindow.appendChild(msgRow);
             chatWindow.scrollTop = chatWindow.scrollHeight;
 
             if (data.username !== username) {
