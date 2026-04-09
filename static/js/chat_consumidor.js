@@ -1,4 +1,9 @@
 // Configura o Marked
+const protocolo = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+const chatSocket = new WebSocket(
+    protocolo + window.location.host + '/ws/chat/' + salaId + '/'
+);
+
 marked.setOptions({ breaks: true });
 
 document.addEventListener("DOMContentLoaded", () => {
