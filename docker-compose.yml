@@ -1,0 +1,21 @@
+services:
+  web-aiwa:
+    build: .
+    container_name: aiwa-chat-web
+    restart: always
+    ports:
+      - "8080:8000"
+    volumes:
+      - ./db.sqlite3:/app/db.sqlite3
+      - ./static:/app/static
+    environment:
+      - DEBUG=False
+      - DJANGO_ENV=prod
+    networks:
+      - aiwa-network
+    env_file:
+      - .env
+
+networks:
+  aiwa-network:
+    driver: bridge
