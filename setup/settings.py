@@ -28,9 +28,15 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 IS_TEST_MODE = os.environ.get('DJANGO_ENV', 'test').lower() == 'test'
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true' if IS_TEST_MODE else False
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['appfix.engineer', 'www.appfix.engineer', '198.211.102.57', 'localhost', '127.0.0.1']
 
-CSRF_TRUSTED_ORIGINS = ['https://*.github.dev', 'https://*.app.github.dev']
+CSRF_TRUSTED_ORIGINS = ['https://*.github.dev', 
+    'https://*.app.github.dev', 
+    'http://appfix.engineer', 
+    'https://appfix.engineer',
+    'http://www.appfix.engineer',
+    'https://www.appfix.engineer'
+]
 
 # Application definition
 
@@ -130,3 +136,4 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
