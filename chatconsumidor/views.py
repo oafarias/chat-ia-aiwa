@@ -1,40 +1,29 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
-from .models import SalaDeChat, atribuir_atendente
+from .models import SalaDeChat
 
 def index(request):
-
-    print(f"--- Nova requisição recebida: {request.method} ---")
-
+    erro = None
     if request.method == "POST":
-        nome = request.POST.get('nome')
-        atendente_sorteado = atribuir_atendente()
+        nome_bruto = request.POST.get('nome', '').strip()
+        cpf = request.POST.get('cpf', '').strip()
         
-        # ESTE PRINT PRECISA ESTAR EXATAMENTE AQUI (com 8 espaços de recuo)
-        print(f"DEBUG: Sorteando atendente para {nome}. Resultado: {atendente_sorteado}")
-
+        # Validação simples
+        if not nome_bruto or not cpf:
+            erro = "Por favor, preencha o seu nome e CPF para iniciar o atendimento."
+            return render(request, 'chatconsumidor/index.html', {'erro': erro})
+            
+        # Cria a sala APENAS (o Model já cuida de colocar na Fila Principal e gerar o protocolo)
         nova_sala = SalaDeChat.objects.create(
-            cliente_nome=nome,
-            atendente=atendente_sorteado,
-            status='ativo' if atendente_sorteado else 'aguardando'
+            cliente_nome=nome_bruto, # Salvamos como o cliente digitou
+            cpf=cpf,
+            atendente=None,
+            status='aguardando'
         )
 
-        if atendente_sorteado:
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                'notificacoes',
-                {
-                    'type': 'notify',
-                    'event_type': 'nova_sala',
-                    'message': f"Novo chat de {nova_sala.cliente_nome}",
-                    'sala_id': str(nova_sala.id)
-                }
-            )
-
+        # Não criamos mais nenhuma Mensagem aqui! Deixamos a sala vazia para a IA agir.
         return redirect('sala_chat', sala_id=nova_sala.id)
 
-    return render(request, 'chatconsumidor/index.html')
+    return render(request, 'chatconsumidor/index.html', {'erro': erro})
 
 def sala_chat(request, sala_id):
     sala = get_object_or_404(SalaDeChat, id=sala_id)

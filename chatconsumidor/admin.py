@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import SalaDeChat, Mensagem
+from .models import SalaDeChat, Mensagem, Fila
 
 # 1. Cria a estrutura da tabela de mensagens para ser embutida
 class MensagemInline(admin.TabularInline):
@@ -12,11 +12,16 @@ class MensagemInline(admin.TabularInline):
     def has_add_permission(self, request, obj=None):
         return False
 
+@admin.register(Fila)
+class FilaAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'slug', 'is_principal')
+    prepopulated_fields = {'slug': ('nome',)}
+
 # 2. Registra a Sala (agora "Conversas") com as mensagens embutidas
 @admin.register(SalaDeChat)
 class SalaDeChatAdmin(admin.ModelAdmin):
-    list_display = ('protocolo', 'cliente_nome', 'atendente', 'status', 'criado_em')
-    list_filter = ('status', 'atendente')
+    list_display = ('protocolo', 'cliente_nome', 'cpf', 'atendente', 'status', 'criado_em')
+    list_filter = ('status', 'fila')
     search_fields = ('protocolo', 'cliente_nome')
     
     # Aqui é onde a mágica acontece:

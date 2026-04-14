@@ -2,7 +2,7 @@ import json
 import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models import SalaDeChat, Mensagem
+from .models import SalaDeChat, Mensagem, Fila
 from chatatendente.models import Atendente
 from django.contrib.auth.models import User
 
@@ -10,15 +10,35 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.sala_id = self.scope['url_route']['kwargs']['sala_id']
         self.room_group_name = f'chat_{self.sala_id}'
-
-        # Evita abrir conexao para salas inexistentes
-        sala_existe = await self.sala_exists()
-        if not sala_existe:
-            await self.close(code=4004)
-            return
-
+        
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
+
+        # LOG DE DEBUG DA FILA
+        na_fila_ia = await self.is_na_fila_ia()
+        sala_vazia = await self.is_room_empty()
+        
+        print(f"DEBUG: Conectado! Sala: {self.sala_id} | Fila IA: {na_fila_ia} | Vazia: {sala_vazia}", flush=True)
+
+        if na_fila_ia and sala_vazia:
+            # Pequeno delay para o front-end registrar a conexão
+            await asyncio.sleep(1)
+            asyncio.create_task(self.responder_com_ia(self.sala_id))
+
+    @database_sync_to_async
+    def is_na_fila_ia(self):
+        try:
+            from .models import SalaDeChat
+            sala = SalaDeChat.objects.select_related('fila').get(id=self.sala_id)
+            # Verifica se o slug é 'ia' (Confira no seu Admin!)
+            return sala.fila and sala.fila.slug == 'ia'
+        except:
+            return False
+
+    @database_sync_to_async
+    def is_room_empty(self):
+        from .models import Mensagem
+        return not Mensagem.objects.filter(sala_id=self.sala_id).exists()
 
     async def disconnect(self, close_code):
         if not getattr(self, 'is_intentional_close', False):
@@ -39,6 +59,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         data = json.loads(text_data)
         action = data.get('action')
 
+        if action == 'transferir_fila':
+            nova_fila_id = data.get('fila_id')
+            await self.mudar_fila(nova_fila_id)
+            return
+        
         if action == 'close_chat':
             self.is_intentional_close = True
             query_string = self.scope.get('query_string', b'').decode('utf-8')
@@ -184,6 +209,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'username': sala.cliente_nome,
             'remetente_id': None,
         }
+    
+    @database_sync_to_async
+    def mudar_fila(self, fila_id):
+        try:
+            sala = SalaDeChat.objects.get(id=self.sala_id)
+            nova_fila = Fila.objects.get(id=fila_id)
+            sala.fila = nova_fila
+            sala.save()
+        except Exception as e:
+            print(f"Erro ao mudar fila: {e}")
+
+    @database_sync_to_async
+    def is_na_fila_ia(self):
+        try:
+            sala = SalaDeChat.objects.select_related('fila').get(id=self.sala_id)
+            # Verifica se a fila atual é a de IA (ajuste o slug conforme criar no admin)
+            return sala.fila and (sala.fila.slug == 'ia' or sala.fila.slug == 'triagem-ia')
+        except:
+            return False
 
     @database_sync_to_async
     def save_message(self, texto, remetente_id):

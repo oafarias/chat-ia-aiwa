@@ -11,19 +11,30 @@ body {
     display: flex; 
     justify-content: center; 
     align-items: center; 
-    height: 100vh; 
+    height: 100vh;
+    /* Adicionamos um padding para garantir que o chat nunca "cole" nas bordas da tela */
+    padding: 20px; 
+    box-sizing: border-box;
 }
 
-.chat-container { 
-    width: 100%; 
-    max-width: 450px; 
-    height: 90vh; 
-    background: white; 
-    display: flex; 
-    flex-direction: column; 
-    box-shadow: 0 10px 25px rgba(0,0,0,0.1); 
-    border-radius: 15px; 
-    overflow: hidden; 
+/* O pulo do gato: A classe principal que envolve o seu chat */
+.chat-container {
+    width: 100%;
+    /* No PC, ele trava em 800px (ou o tamanho que preferir), criando o espaço nas laterais */
+    max-width: 1300px; 
+    
+    height: 100%;
+    /* No PC, ele trava em 900px de altura, para não ficar esticado até o rodapé */
+    max-height: 900px; 
+    
+    /* Um pouco de sombra para dar a sensação de que o chat está flutuando sobre o fundo */
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1); 
+    border-radius: 16px; 
+    overflow: hidden; /* Garante que o conteúdo não vaze pelas bordas arredondadas */
+    
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
 }
 
 .chat-header { 

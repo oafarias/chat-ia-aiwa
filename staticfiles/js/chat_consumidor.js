@@ -1,6 +1,7 @@
 // Configura o Marked
 marked.setOptions({ breaks: true });
 
+
 document.addEventListener("DOMContentLoaded", () => {
     // Processa histórico markdown
     document.querySelectorAll('.markdown-content').forEach(el => {

@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel AIWA - Operação</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root {
             --aiwa-red: #E30613;
@@ -21,7 +22,6 @@
         .logo-area img { max-height: 25px; }
         .status-badge { display: inline-block; background: #2e7d32; color: white; padding: 4px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; margin-top: 10px; }
         
-        /* Lista de Chats */
         .chat-list { flex: 1; overflow-y: auto; padding: 15px; }
         .chat-item { padding: 15px; margin-bottom: 10px; background: var(--bg-panel); border-radius: 8px; cursor: pointer; text-decoration: none; color: white; display: block; border-left: 4px solid transparent; transition: 0.2s; }
         .chat-item:hover { background: #2a2a2a; }
@@ -30,22 +30,34 @@
         /* Chat Principal */
         .main-chat { flex: 1; display: flex; flex-direction: column; background: var(--bg-dark); }
         .chat-header { padding: 20px; background: var(--bg-panel); border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
-        .chat-history { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .chat-history { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
         
+        /* Divisor de Data */
+        .date-divider { display: flex; align-items: center; text-align: center; margin: 20px 0; color: #666; font-size: 0.7rem; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+        .date-divider::before, .date-divider::after { content: ''; flex: 1; border-bottom: 1px solid #333; }
+        .date-divider:not(:empty)::before { margin-right: 1em; }
+        .date-divider:not(:empty)::after { margin-left: 1em; }
+
         /* Balões de Mensagem */
-        .msg { padding: 12px 18px; border-radius: 15px; max-width: 70%; animation: fadeIn 0.3s ease; line-height: 1.4; }
+        .msg { padding: 12px 18px; border-radius: 15px; max-width: 75%; animation: fadeIn 0.3s ease; line-height: 1.4; position: relative; }
         .msg-cliente { background: #333; align-self: flex-start; border-bottom-left-radius: 2px; }
         .msg-atendente { background: var(--aiwa-red); align-self: flex-end; border-bottom-right-radius: 2px; }
+        
+        .msg-author { font-size: 0.7rem; font-weight: bold; margin-bottom: 4px; display: block; color: #aaa; }
+        .msg-atendente .msg-author { color: #ffdada; text-align: right; }
+
+        .msg-time { font-size: 0.65rem; color: #999; margin-top: 5px; display: block; text-align: right; }
+        .msg-atendente .msg-time { color: #ffdada; opacity: 0.8; }
+
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* Área de Input */
+        /* Input */
         .chat-input { padding: 20px; background: var(--bg-panel); display: flex; gap: 10px; border-top: 1px solid #333; }
         .chat-input input { flex: 1; padding: 15px; border-radius: 25px; border: none; background: #333; color: white; outline: none; font-size: 1rem; }
         .chat-input button { padding: 15px 30px; border-radius: 25px; border: none; background: var(--aiwa-red); color: white; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .chat-input button:hover { background: #b3050f; }
         
-        /* Estado Vazio */
         .empty-state { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; color: #666; font-size: 1.2rem; }
+        .markdown-content p { margin: 0; }
     </style>
 </head>
 <body>
@@ -61,7 +73,7 @@
                 <a href="{% url 'painel_sala' s.id %}" class="chat-item {% if sala_selecionada and s.id == sala_selecionada.id %}ativo{% endif %}">
                     <strong>{{ s.cliente_nome }}</strong><br>
                     <small style="color: #aaa;">Prot: {{ s.protocolo }}</small><br>
-                    <small style="color: #aaa;">Status: {{ s.get_status_display }}</small>
+                    <small style="color: #aaa;">Documento: {{ s.cpf|default:"Não informado" }}</small>
                 </a>
             {% empty %}
                 <p style="text-align: center; color: #666; font-size: 0.9rem;">Sem clientes na fila.</p>
@@ -73,13 +85,13 @@
         {% if sala_selecionada %}
             <div class="chat-header">
                 <div>
-                    <h3 style="margin: 0">A atender {{ sala_selecionada.cliente_nome }}</h3>
+                    <h3 style="margin: 0">Atendendo: {{ sala_selecionada.cliente_nome }}</h3>
                     <span style="background: #333; padding: 5px 15px; border-radius: 15px; font-size: 0.8rem;">Protocolo: {{ sala_selecionada.protocolo }}</span>
                 </div>
                 
                 <form action="{% url 'encerrar_chat' sala_selecionada.id %}" method="POST" style="margin: 0;">
                     {% csrf_token %}
-                    <button class="submit" style="background: transparent; border: 1px solid var(--aiwa-red); color: var(--aiwa-red); padding: 8px 15px; border-radius: 15px; cursor: pointer; font-weight: bold; transition: 0.3s;" onmouseover="this.style.background='var(--aiwa-red)'; this.style.color='white';" onmouseout="this.style.background='transparent'; this.style.color='var(--aiwa-red)';">
+                    <button type="submit" style="background: transparent; border: 1px solid var(--aiwa-red); color: var(--aiwa-red); padding: 8px 15px; border-radius: 15px; cursor: pointer; font-weight: bold; transition: 0.3s;">
                         Encerrar Chat
                     </button>
                 </form>
@@ -87,139 +99,114 @@
             
             <div class="chat-history" id="chat-window">
                 {% for msg in mensagens %}
-                    {% if msg.remetente_atendente %}
-                        <div class="msg msg-atendente">{{ msg.texto }}</div>
-                    {% else %}
-                        <div class="msg msg-cliente">
-                            <strong style="font-size: 0.8em; color: #aaa;">{{ sala_selecionada.cliente_nome }}</strong><br>
-                            {{ msg.texto }}
+                    
+                    {% ifchanged msg.timestamp|date:"d/m/Y" %}
+                        <div class="date-divider">
+                            {% if msg.timestamp|date:"d/m/Y" == today|date:"d/m/Y" %}
+                                Hoje
+                            {% else %}
+                                {{ msg.timestamp|date:"d \d\e F \d\e Y" }}
+                            {% endif %}
                         </div>
-                    {% endif %}
+                    {% endifchanged %}
+
+                    <div class="msg {% if msg.remetente_atendente %}msg-atendente{% else %}msg-cliente{% endif %}">
+                        <span class="msg-author">
+                            {% if msg.remetente_atendente %}
+                                {{ msg.remetente_atendente.user.first_name|default:msg.remetente_atendente.user.username }}
+                            {% else %}
+                                {{ sala_selecionada.cliente_nome }}
+                            {% endif %}
+                        </span>
+                        <div class="markdown-content">{{ msg.texto }}</div>
+                        <span class="msg-time">{{ msg.timestamp|date:"H:i" }}</span>
+                    </div>
                 {% endfor %}
             </div>
             
             <form class="chat-input" id="form-chat">
-                <input type="text" id="input-mensagem" placeholder="Escreva a sua resposta..." autocomplete="off" name="mensagem">
+                <input type="text" id="input-mensagem" placeholder="Escreva a sua resposta (Markdown suportado)..." autocomplete="off">
                 <button type="submit" id="btn-enviar">Enviar</button>
             </form>
             
             <script>
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                function playChatSound() {
-                    try {
-                        const osc = audioCtx.createOscillator();
-                        const gainNode = audioCtx.createGain();
-                        osc.connect(gainNode);
-                        gainNode.connect(audioCtx.destination);
-                        osc.type = "sine";
-                        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-                        gainNode.gain.setValueAtTime(0.05, audioCtx.currentTime);
-                        osc.start();
-                        gainNode.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.1);
-                        osc.stop(audioCtx.currentTime + 0.1);
-                    } catch(e) {}
+                marked.setOptions({ breaks: true });
+
+                function renderMarkdown() {
+                    document.querySelectorAll('.markdown-content').forEach(el => {
+                        if (!el.dataset.rendered) {
+                            el.innerHTML = marked.parse(el.textContent);
+                            el.dataset.rendered = "true";
+                        }
+                    });
                 }
+                renderMarkdown();
+
+                const chatWindow = document.querySelector('#chat-window');
+                chatWindow.scrollTop = chatWindow.scrollHeight;
 
                 const salaId = "{{ sala_selecionada.id }}";
-                const username = "{{ request.user.username }}";
+                const myUsername = "{{ request.user.username }}";
 
-                window.chatSocketGlobal = new WebSocket(
+                const chatSocket = new WebSocket(
                     (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
                     + window.location.host + '/ws/chat/' + salaId + '/?tipo=atendente'
                 );
 
-                window.chatSocketGlobal.onmessage = function(e) {
+                chatSocket.onmessage = function(e) {
                     const data = JSON.parse(e.data);
-                    const chatWindow = document.querySelector('#chat-window');
+                    
                     if (data.action === 'chat_ended') {
-                        const divError = document.createElement('div');
-                        divError.style = "text-align:center; padding: 10px; color: white; background: #c00; font-weight: bold; margin-bottom: 10px; border-radius: 5px;";
-                        divError.innerText = "Este chat foi finalizado pelo consumidor ou a conexão caiu.";
-                        chatWindow.appendChild(divError);
-                        chatWindow.scrollTop = chatWindow.scrollHeight;
-                        // wait 3 sec then reload list or self
-                        setTimeout(() => { window.location.href = '/atendente/painel/'; }, 3000);
+                        alert("O chat foi finalizado.");
+                        window.location.href = '/atendente/painel/';
                         return;
                     }
+
+                    const now = new Date();
+                    const timeStr = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
                     
                     const msgDiv = document.createElement('div');
+                    const isMe = (data.username === myUsername);
+                    msgDiv.className = 'msg ' + (isMe ? 'msg-atendente' : 'msg-cliente');
                     
-                    if (data.username === username) {
-                        msgDiv.className = 'msg msg-atendente';
-                        msgDiv.innerText = data.message;
-                    } else {
-                        msgDiv.className = 'msg msg-cliente';
-                        const sender = document.createElement('strong');
-                        sender.style.fontSize = '0.8em';
-                        sender.style.color = '#aaa';
-                        sender.innerText = data.username;
+                    const authorDisplay = isMe ? "Você" : data.username;
 
-                        msgDiv.appendChild(sender);
-                        msgDiv.appendChild(document.createElement('br'));
-                        msgDiv.appendChild(document.createTextNode(data.message));
-                    }
+                    msgDiv.innerHTML = `
+                        <span class="msg-author">${authorDisplay}</span>
+                        <div class="markdown-content">${marked.parse(data.message)}</div>
+                        <span class="msg-time">${timeStr}</span>
+                    `;
                     
                     chatWindow.appendChild(msgDiv);
                     chatWindow.scrollTop = chatWindow.scrollHeight;
-
-                    if (data.username !== username) {
-                        playChatSound();
-                    }
                 };
 
-                function enviarMensagem() {
+                document.getElementById('form-chat').addEventListener('submit', function(e) {
+                    e.preventDefault();
                     const input = document.querySelector('#input-mensagem');
                     const mensagem = input.value.trim();
-
-                    if (mensagem !== "" && window.chatSocketGlobal.readyState === WebSocket.OPEN) {
-                        window.chatSocketGlobal.send(JSON.stringify({
-                            'message': mensagem
-                        }));
+                    if (mensagem !== "" && chatSocket.readyState === WebSocket.OPEN) {
+                        chatSocket.send(JSON.stringify({ 'message': mensagem }));
                         input.value = '';
                     }
-                }
-
-                document.getElementById('form-chat').addEventListener('submit', function(e) {
-                    e.preventDefault(); // Impede o recarregamento da página
-                    enviarMensagem();
                 });
             </script>
         {% else %}
             <div class="empty-state">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 20px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                Selecione uma conversa ao lado para iniciar.
+                Selecione uma conversa para iniciar.
             </div>
         {% endif %}
     </div>
 
     <script>
-        // Socket de notificação global para o painel de atendimento
         const notifSocket = new WebSocket(
             (window.location.protocol === 'https:' ? 'wss://' : 'ws://') 
             + window.location.host + '/ws/notificacoes/'
         );
-
-        notifSocket.onmessage = function(e) {
+        notifSocket.onmessage = (e) => {
             const data = JSON.parse(e.data);
-            
-            // Se for uma notificação de mensagem para uma sala diferente ou nova
             if (data.type === 'nova_sala' || data.type === 'nova_mensagem') {
                 if (typeof salaId === 'undefined' || data.sala_id !== salaId) {
-                    if (typeof playChatSound === 'function') {
-                        playChatSound();
-                    } else {
-                        try {
-                            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                            const osc = ctx.createOscillator();
-                            osc.connect(ctx.destination);
-                            osc.frequency.setValueAtTime(880, ctx.currentTime);
-                            osc.start();
-                            osc.stop(ctx.currentTime + 0.1);
-                        } catch(e) {
-                            console.log("AudioContext blocked by browser.");
-                        }
-                    }
-                    // Atualiza a barra lateral forçando recarregamento
                     setTimeout(() => window.location.reload(), 500);
                 }
             }

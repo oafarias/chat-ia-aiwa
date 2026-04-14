@@ -14,36 +14,45 @@ def gerar_protocolo():
         if not SalaDeChat.objects.filter(protocolo=protocolo).exists():
             return protocolo
 
+class Fila(models.Model):
+    nome = models.CharField(max_length=50)
+    slug = models.SlugField(unique=True)
+    is_principal = models.BooleanField(default=False, verbose_name="Fila Principal")
+
+    def save(self, *args, **kwargs):
+        if self.is_principal:
+            Fila.objects.filter(is_principal=True).update(is_principal=False)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.nome} {'(Principal)' if self.is_principal else ''}"
+
 class SalaDeChat(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
-    STATUS_CHOICES = [
-        ('aguardando', 'Aguardando Atendente'),
-        ('ativo', 'Em Atendimento'),
-        ('encerrado', 'Encerrado'),
-    ]
-
-    ENCERRADO_POR_CHOICES = [
-        ('atendente', 'Atendente'),
-        ('consumidor', 'Consumidor'),
-        ('rede_atendente', 'Falha de Rede (Atendente)'),
-        ('rede_consumidor', 'Falha de Rede (Consumidor)'),
-    ]
+    cpf = models.CharField(max_length=14, db_index=True, null=True, blank=True) # Corrigido para CharField
+    fila = models.ForeignKey(Fila, on_delete=models.SET_NULL, null=True, blank=True, related_name='salas')
+    ultima_atividade = models.DateTimeField(auto_now=True)
 
     protocolo = models.CharField(max_length=16, unique=True, blank=True, null=True)
     cliente_nome = models.CharField(max_length=100)
     atendente = models.ForeignKey(Atendente, on_delete=models.SET_NULL, null=True, blank=True, related_name='salas')
+    
+    STATUS_CHOICES = [('aguardando', 'Aguardando'), ('ativo', 'Ativo'), ('encerrado', 'Encerrado')]
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='aguardando')
-    encerrado_por = models.CharField(max_length=20, choices=ENCERRADO_POR_CHOICES, blank=True, null=True)
     criado_em = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
         if not self.protocolo:
             self.protocolo = gerar_protocolo()
+        # Se a sala for nova e não tiver fila, atribui a Fila Principal
+        if not self.fila:
+            fila_principal = Fila.objects.filter(is_principal=True).first()
+            if fila_principal:
+                self.fila = fila_principal
+            else:
+                print("ATENÇÃO: Nenhuma Fila Principal configurada no Admin!")
+                
         super().save(*args, **kwargs)
-
-    def __str__(self):
-        return f"{self.protocolo} - {self.cliente_nome}"
 
     class Meta:
         verbose_name="Conversa"
