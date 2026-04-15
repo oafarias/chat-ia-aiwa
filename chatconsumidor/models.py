@@ -65,6 +65,13 @@ class Mensagem(models.Model):
     remetente_atendente = models.ForeignKey(Atendente, on_delete=models.SET_NULL, null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
+    # --- NOVO CAMPO ADICIONADO ---
+    ai_metadata = models.JSONField(
+        null=True, 
+        blank=True, 
+        help_text="Armazena o raciocínio da IA, intenção, trechos usados da base de conhecimento e tokens."
+    )
+
     class Meta:
         ordering = ['timestamp']
         verbose_name = "Mensagem"

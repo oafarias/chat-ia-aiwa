@@ -134,8 +134,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({'action': 'typing_start'}))
         texto_completo = ""
 
+        metadata_ia = {}
+
         # O serviço agora lê o banco e se vira sozinho
-        async for chunk in perguntar_a_ia_stream(sala_id):
+        async for chunk in perguntar_a_ia_stream(sala_id, meta_out=metadata_ia):
             texto_completo += chunk
             await self.send(text_data=json.dumps({
                 'action': 'stream_chunk',
@@ -144,7 +146,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }))
 
         await self.send(text_data=json.dumps({'action': 'stream_end'}))
-        await self.salvar_mensagem_ia(texto_completo)
+        await self.salvar_mensagem_ia(texto_completo, ai_metadata=metadata_ia)
 
     async def chat_message(self, event):
         # Envia a mensagem para o WebSocket (Consumidor ou Atendente)
@@ -265,7 +267,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return False
 
     @database_sync_to_async
-    def salvar_mensagem_ia(self, texto):
+    def salvar_mensagem_ia(self, texto, ai_metadata=None):
         try:
             sala = SalaDeChat.objects.get(id=self.sala_id)
             
@@ -282,7 +284,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             Mensagem.objects.create(
                 sala=sala, 
                 texto=texto, 
-                remetente_atendente=atendente_bot
+                remetente_atendente=atendente_bot,
+                ai_metadata=ai_metadata
             )
             return user_bot.first_name
         except Exception as e:

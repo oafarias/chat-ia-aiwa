@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.utils.html import format_html
+import json
 from .models import SalaDeChat, Mensagem, Fila
 
 # 1. Cria a estrutura da tabela de mensagens para ser embutida
@@ -26,3 +28,33 @@ class SalaDeChatAdmin(admin.ModelAdmin):
     
     # Aqui é onde a mágica acontece:
     inlines = [MensagemInline]
+
+@admin.register(Mensagem)
+class MensagemAdmin(admin.ModelAdmin):
+    list_display = ('id', 'sala', 'remetente_atendente', 'timestamp', 'tem_metadados')
+    list_filter = ('timestamp', ('remetente_atendente', admin.RelatedOnlyFieldListFilter))
+    
+    # Colocamos o campo raciocinio_ia_formatado como somente leitura
+    readonly_fields = ('raciocinio_ia_formatado',)
+    
+    # Esconde o campo JSON original feio e mostra apenas o formatado
+    exclude = ('ai_metadata',)
+
+    def tem_metadados(self, obj):
+        """Retorna um ícone de 'check' verde no admin se a mensagem tiver raciocínio da IA"""
+        return bool(obj.ai_metadata)
+    tem_metadados.boolean = True
+    tem_metadados.short_description = "IA Pensou?"
+
+    def raciocinio_ia_formatado(self, obj):
+        """Formata o JSON em um bloco de código bonitinho no painel do Admin"""
+        if obj.ai_metadata:
+            # Transforma o dicionário em um JSON com indentação e quebras de linha
+            json_formatado = json.dumps(obj.ai_metadata, indent=4, ensure_ascii=False)
+            # Retorna um HTML com a tag <pre> para respeitar os espaços
+            return format_html(
+                '<pre style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; font-family: monospace; white-space: pre-wrap;">{}</pre>', 
+                json_formatado
+            )
+        return "Sem metadados gerados."
+    raciocinio_ia_formatado.short_description = "Raciocínio Interno da IA"
