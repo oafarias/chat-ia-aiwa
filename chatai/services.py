@@ -101,11 +101,11 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None):
     
     try:
         response = await client.aio.models.generate_content_stream(
-            model="gemini-2.5-flash",
+            model="gemini-3-flash-preview",
             contents=historico,
             config=types.GenerateContentConfig(
                 system_instruction=instrucao_sistema_completa,
-                temperature=0.7,
+                temperature=0.6,
             )
         )
 
