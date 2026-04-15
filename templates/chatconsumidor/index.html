@@ -12,7 +12,8 @@
     <div style="display: flex; flex-direction: column; align-items: center; width: 100%; height: 100%;">
         <div style="width: 100%; max-width: 1300px; margin-bottom: 10px;">
             <div style="background-color: #fff3cd; color: #853804; border: 1px solid #ffeeba; border-radius: 8px; padding: 10px; font-size: 0.9rem; text-align: center;">
-                <strong>⚠️ Atenção:</strong> Este é um ambiente de testes e desenvolvimento as funcionalidades podem apresentar instabilidade.
+                <strong>⚠️ 🚧 🛠️ <br> Atenção:</strong> Este é um ambiente de testes e está em desenvolvimento. As funcionalidades podem apresentar instabilidade.<br>
+                <strong>Não divulgue para consumidores finais!!!</strong>
             </div>
         </div>
         <div class="chat-container">
@@ -39,27 +40,31 @@
                         <a href="/" style="display:inline-block; background: var(--aiwa-red); color: white; padding: 10px 20px; border-radius: 20px; text-decoration: none; margin-top: 20px;">INICIAR NOVO CHAT</a>
                     </div>
                 {% elif not sala %}
-                    <div style="text-align: center; margin-top: 50px;">
-                        <h3>Bem-vindo à Aiwa!</h3>
+                    <div style="text-align: center; font-size: 1.25rem; margin-top: 50px;">
+                        <h3>BEM-VINDO AO ATENDIMENTO AIWA!</h3>
                         <form method="POST">
                             {% if erro %}
                                 <div style="color: red; margin-bottom: 15px; font-weight: bold;">{{ erro }}</div>
                             {% endif %}
                             {% csrf_token %}
                             <div style="margin-bottom: 20px;">
-                                <label for="nome" style="display: block; font-weight: bold; margin-bottom: 10px; font-size: 0.95rem; color: #333;">
-                                    Qual o seu nome ou como gostaria de ser chamado?
                                 </label>
-                                <input type="text" id="nome" name="nome" placeholder="O seu nome..." required 
+                                <label for="subtitulo" style="display: block; margin-bottom: 10px; font-size: 0.80rem; color: #333;">
+                                    Por favor preencha os dados abaixo para iniciarmos o seu atendimento
+                                </label>
+                                <label for="nome" style="display: block; font-weight: bold; margin-bottom: 10px; font-size: 0.95rem; color: #333;">
+                                    Nome:*
+                                </label>
+                                <input type="text" id="nome" name="nome" placeholder="Digite seu nome ou como gostaria de ser chamado" required 
                                     style="width: 80%; max-width: 400px; padding: 12px 15px; border-radius: 25px; border: 1px solid #ddd; outline: none; box-sizing: border-box; font-size: 1rem; text-align: center;">
                             </div>
 
                             <div style="margin-bottom: 30px;">
                                 <label for="cpf" style="display: block; font-weight: bold; margin-bottom: 10px; font-size: 0.95rem; color: #333;">
-                                    Qual o número do seu CPF
+                                    CPF:*
                                 </label>
                                 <input type="text" id="cpf" name="cpf" placeholder="000.000.000-00" required 
-                                    pattern="\d{11}" maxlength="11" title="Digite exatamente 11 números"
+                                    maxlength="14" 
                                     style="width: 80%; max-width: 400px; padding: 12px 15px; border-radius: 25px; border: 1px solid #ddd; outline: none; box-sizing: border-box; font-size: 1rem; text-align: center;">
                             </div>
 

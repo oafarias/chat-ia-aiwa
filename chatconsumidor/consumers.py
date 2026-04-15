@@ -140,7 +140,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({
                 'action': 'stream_chunk',
                 'message': chunk,
-                'username': 'Assistente Virtual'
+                'username': 'IA da AIWA'
             }))
 
         await self.send(text_data=json.dumps({'action': 'stream_end'}))

@@ -52,7 +52,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 alert('⚠️ O CPF informado é inválido. Por favor, verifique os números e tente novamente.');
                 cpfInput.style.borderColor = 'red'; 
                 cpfInput.focus(); 
+                return;
             }
+
+            const cpfParaOBackend = cpfInput.value.replace(/\D/g, '');
+            cpfInput.value = cpfParaOBackend;
         });
     }
 });

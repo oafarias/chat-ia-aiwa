@@ -70,7 +70,8 @@ async def perguntar_a_ia_stream(sala_id):
         if teve_anterior:
             prompt_secreto += (
                 "Notei que este cliente JÁ TEM HISTÓRICO conosco (leia as mensagens anteriores acima). "
-                "Faça uma saudação de boas-vindas de retorno contextualizada, informe o novo protocolo "
+                "Faça uma saudação de boas-vindas de retorno contextualizada, informe o novo protocolo, "
+                "informe que localizou um atendimento anterior "
                 "e pergunte de forma empática se ele quer dar continuidade ao caso anterior ou "
                 "se precisa de ajuda com algo novo."
             )
