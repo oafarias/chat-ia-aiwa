@@ -1,52 +1,78 @@
 from django.contrib import admin
 from django.contrib import messages
-from django.utils.html import format_html
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
 import json
+import re
 from .models import SalaDeChat, Mensagem, Fila
 
-# 1. Cria a estrutura da tabela de mensagens para ser embutida
-class MensagemInline(admin.TabularInline):
+class MensagemInline(admin.StackedInline):
     model = Mensagem
-    extra = 0 # Não exibe linhas vazias extras
-    # 5. Não permitir a edição do campo Ai metadata (adicionado aos readonly_fields)
-    readonly_fields = ('remetente_atendente', 'texto', 'timestamp', 'ai_metadata')
-    can_delete = False # Segurança: impede apagar mensagens individuais do histórico
+    extra = 0 
+    readonly_fields = ('remetente_atendente', 'texto', 'timestamp', 'raciocinio_ia_formatado')
+    exclude = ('ai_metadata',) 
+    can_delete = False 
     
-    # Remove o botão de "Adicionar nova mensagem" por dentro do admin
     def has_add_permission(self, request, obj=None):
         return False
+
+    @admin.display(description="Raciocínio Interno da IA")
+    def raciocinio_ia_formatado(self, obj):
+        if not obj.ai_metadata:
+            return "Sem metadados gerados."
+
+        # Validação de segurança: caso o Django tenha salvo como String ao invés de Dict
+        metadata = obj.ai_metadata
+        if isinstance(metadata, str):
+            try:
+                metadata = json.loads(metadata)
+            except:
+                metadata = {"Dados Brutos": metadata}
+
+        # Criação do HTML blindado
+        html_parts = ['<div style="background-color: #f8f9fa; padding: 20px; border: 1px solid #dee2e6; border-radius: 6px; box-shadow: inset 0 1px 2px rgba(0,0,0,.05);">']
+
+        for key, value in metadata.items():
+            key_formatted = escape(str(key).replace('_', ' ').title())
+            
+            if isinstance(value, (dict, list)):
+                value_str = json.dumps(value, indent=4, ensure_ascii=False)
+                value_html = f"<pre style='margin: 0; white-space: pre-wrap; font-family: monospace; background: #fff; padding: 12px; border-radius: 4px; border: 1px solid #e9ecef; font-size: 13px;'>{escape(value_str)}</pre>"
+            else:
+                val_str = escape(str(value))
+                
+                # Regex Seguro para Markdown (captura espaços e quebras de linha com .*?)
+                val_str = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', val_str, flags=re.DOTALL)
+                val_str = re.sub(r'\*(.*?)\*', r'<em>\1</em>', val_str, flags=re.DOTALL)
+                val_str = re.sub(r'`(.*?)`', r'<code style="background-color: #e9ecef; padding: 2px 5px; border-radius: 4px; font-family: monospace; color: #d63384; font-size: 12px;">\1</code>', val_str, flags=re.DOTALL)
+                
+                value_html = f"<div style='white-space: pre-wrap; line-height: 1.6; font-size: 14px; color: #212529; background-color: #fff; padding: 15px; border: 1px solid #e9ecef; border-radius: 4px;'>{val_str}</div>"
+
+            html_parts.append(f"<div style='margin-bottom: 20px;'><h4 style='margin: 0 0 8px 0; color: #495057; font-size: 13px; text-transform: uppercase; border-bottom: 2px solid #e9ecef; padding-bottom: 5px;'>{key_formatted}</h4>{value_html}</div>")
+        
+        html_parts.append('</div>')
+        return mark_safe("".join(html_parts))
 
 @admin.register(Fila)
 class FilaAdmin(admin.ModelAdmin):
     list_display = ('nome', 'slug', 'is_principal')
     prepopulated_fields = {'slug': ('nome',)}
 
-# 2. Registra a Sala (agora "Conversas") com as mensagens embutidas
 @admin.register(SalaDeChat)
 class SalaDeChatAdmin(admin.ModelAdmin):
     list_display = ('protocolo', 'cliente_nome', 'cpf', 'atendente', 'status', 'criado_em')
     list_filter = ('status', 'fila')
-    
-    # 4 (b). Incluí o CPF também na busca rápida, pois bloqueamos a edição dele
     search_fields = ('protocolo', 'cliente_nome', 'cpf')
-    
-    # 4 (a). Não permitir a alteração dos campos Cpf, Protocolo, Cliente nome
     readonly_fields = ('id', 'protocolo', 'cliente_nome', 'cpf', 'criado_em')
     
-    # Aqui é onde a mágica acontece:
     inlines = [MensagemInline]
 
-    # 1. Classificar as Conversas e incluir uma paginação
-    ordering = ('-criado_em',)  # Da mais recente para a mais antiga
-    list_per_page = 50          # 50 registros por página
-
-    # 3. Incluir a ação rápida de Finalizar Conversa
+    ordering = ('-criado_em',)  
+    list_per_page = 50          
     actions = ['finalizar_conversa']
 
     @admin.action(description='Finalizar conversas selecionadas')
     def finalizar_conversa(self, request, queryset):
-        # Atualiza o status para encerrado. 
-        # (Nota: se o seu model de status usar outro termo como 'fechado' ou 'finalizado', ajuste aqui)
         atualizados = queryset.update(status='encerrado')
         self.message_user(
             request, 
@@ -54,7 +80,6 @@ class SalaDeChatAdmin(admin.ModelAdmin):
             messages.SUCCESS
         )
 
-    # 2. Remover o botão de Adicionar Conversa manualmente
     def has_add_permission(self, request):
         return False
 
@@ -62,28 +87,16 @@ class SalaDeChatAdmin(admin.ModelAdmin):
 class MensagemAdmin(admin.ModelAdmin):
     list_display = ('id', 'sala', 'remetente_atendente', 'timestamp', 'tem_metadados')
     list_filter = ('timestamp', ('remetente_atendente', admin.RelatedOnlyFieldListFilter))
-    
-    # Colocamos o campo raciocinio_ia_formatado como somente leitura
     readonly_fields = ('raciocinio_ia_formatado',)
-    
-    # Esconde o campo JSON original feio e mostra apenas o formatado
     exclude = ('ai_metadata',)
 
     def tem_metadados(self, obj):
-        """Retorna um ícone de 'check' verde no admin se a mensagem tiver raciocínio da IA"""
         return bool(obj.ai_metadata)
     tem_metadados.boolean = True
     tem_metadados.short_description = "IA Pensou?"
 
+    @admin.display(description="Raciocínio Interno da IA")
     def raciocinio_ia_formatado(self, obj):
-        """Formata o JSON em um bloco de código bonitinho no painel do Admin"""
-        if obj.ai_metadata:
-            # Transforma o dicionário em um JSON com indentação e quebras de linha
-            json_formatado = json.dumps(obj.ai_metadata, indent=4, ensure_ascii=False)
-            # Retorna um HTML com a tag <pre> para respeitar os espaços
-            return format_html(
-                '<pre style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; font-family: monospace; white-space: pre-wrap;">{}</pre>', 
-                json_formatado
-            )
-        return "Sem metadados gerados."
-    raciocinio_ia_formatado.short_description = "Raciocínio Interno da IA"
+        # Chama a mesma função que está no Inline para não duplicar código!
+        inline = MensagemInline(self.model, self.admin_site)
+        return inline.raciocinio_ia_formatado(obj)
