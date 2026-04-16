@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib import messages
-from django.utils.html import escape
+from django.utils.html import escape, format_html
 from django.utils.safestring import mark_safe
 import json
 import re
@@ -21,7 +21,6 @@ class MensagemInline(admin.StackedInline):
         if not obj.ai_metadata:
             return "Sem metadados gerados."
 
-        # Validação de segurança: caso o Django tenha salvo como String ao invés de Dict
         metadata = obj.ai_metadata
         if isinstance(metadata, str):
             try:
@@ -29,7 +28,6 @@ class MensagemInline(admin.StackedInline):
             except:
                 metadata = {"Dados Brutos": metadata}
 
-        # Criação do HTML blindado
         html_parts = ['<div style="background-color: #f8f9fa; padding: 20px; border: 1px solid #dee2e6; border-radius: 6px; box-shadow: inset 0 1px 2px rgba(0,0,0,.05);">']
 
         for key, value in metadata.items():
@@ -40,8 +38,6 @@ class MensagemInline(admin.StackedInline):
                 value_html = f"<pre style='margin: 0; white-space: pre-wrap; font-family: monospace; background: #fff; padding: 12px; border-radius: 4px; border: 1px solid #e9ecef; font-size: 13px;'>{escape(value_str)}</pre>"
             else:
                 val_str = escape(str(value))
-                
-                # Regex Seguro para Markdown (captura espaços e quebras de linha com .*?)
                 val_str = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', val_str, flags=re.DOTALL)
                 val_str = re.sub(r'\*(.*?)\*', r'<em>\1</em>', val_str, flags=re.DOTALL)
                 val_str = re.sub(r'`(.*?)`', r'<code style="background-color: #e9ecef; padding: 2px 5px; border-radius: 4px; font-family: monospace; color: #d63384; font-size: 12px;">\1</code>', val_str, flags=re.DOTALL)
@@ -60,7 +56,8 @@ class FilaAdmin(admin.ModelAdmin):
 
 @admin.register(SalaDeChat)
 class SalaDeChatAdmin(admin.ModelAdmin):
-    list_display = ('protocolo', 'cliente_nome', 'cpf', 'atendente', 'status', 'criado_em')
+    # ITEM 3: Adicionamos o 'link_atendimento' na lista de exibição
+    list_display = ('protocolo', 'cliente_nome', 'cpf', 'atendente', 'status', 'criado_em', 'link_atendimento')
     list_filter = ('status', 'fila')
     search_fields = ('protocolo', 'cliente_nome', 'cpf')
     readonly_fields = ('id', 'protocolo', 'cliente_nome', 'cpf', 'criado_em')
@@ -83,6 +80,19 @@ class SalaDeChatAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         return False
 
+    # ITEM 3: Criação do botão visual de atalho
+    @admin.display(description="Atendimento")
+    def link_atendimento(self, obj):
+        if obj.status != 'encerrado':
+            # Rota ajustada conforme o padrão da aplicação
+            url = f"/atendimento/{obj.id}/" 
+            return format_html(
+                '<a style="background-color: #28a745; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; text-decoration: none;" href="{}" target="_blank">Ir para Chat</a>', 
+                url
+            )
+        # CORREÇÃO APLICADA: Substituindo format_html por mark_safe
+        return mark_safe('<span style="color: #6c757d; font-style: italic;">Encerrado</span>')
+
 @admin.register(Mensagem)
 class MensagemAdmin(admin.ModelAdmin):
     list_display = ('id', 'sala', 'remetente_atendente', 'timestamp', 'tem_metadados')
@@ -97,6 +107,5 @@ class MensagemAdmin(admin.ModelAdmin):
 
     @admin.display(description="Raciocínio Interno da IA")
     def raciocinio_ia_formatado(self, obj):
-        # Chama a mesma função que está no Inline para não duplicar código!
         inline = MensagemInline(self.model, self.admin_site)
         return inline.raciocinio_ia_formatado(obj)

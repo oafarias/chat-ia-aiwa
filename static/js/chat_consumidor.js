@@ -109,6 +109,27 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = JSON.parse(e.data);
         const chatWindow = document.querySelector('#chat-window');
 
+        // Lógica para bloquear a tela quando o chat está sendo finalizado
+        if (data.action === 'finalizando') {
+            const inputMensagem = document.getElementById('input-mensagem');
+            const btnEnviar = document.getElementById('btn-enviar');
+            
+            if (inputMensagem) {
+                inputMensagem.disabled = true;
+                inputMensagem.placeholder = "Atendimento sendo finalizado...";
+            }
+            if (btnEnviar) {
+                btnEnviar.disabled = true;
+            }
+            
+            const typingContainer = document.getElementById('typing-container');
+            if (typingContainer) {
+                typingContainer.innerHTML = 'Sessão encerrada por inatividade. Aguarde...';
+                typingContainer.style.display = 'block';
+            }
+            return;
+        }
+
         if (data.action === 'typing_start') {
             const typingContainer = document.querySelector('#typing-container');
             if (typingContainer) typingContainer.style.display = 'flex';

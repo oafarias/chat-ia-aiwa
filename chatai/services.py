@@ -18,7 +18,6 @@ def obter_historico_por_cpf(sala_id):
         cpf_cliente = sala_atual.cpf
         
         if cpf_cliente:
-            # FIX: Busca segura. Pega mensagens da sala ATUAL ou de qualquer sala com o mesmo CPF
             mensagens = Mensagem.objects.filter(
                 Q(sala_id=sala_id) | Q(sala__cpf=cpf_cliente)
             ).order_by('timestamp')
@@ -31,7 +30,6 @@ def obter_historico_por_cpf(sala_id):
             if not texto: continue
             role = "model" if msg.remetente_atendente else "user"
             
-            # FIX: GEMINI EXIGE ALTERNÂNCIA (Agrupa mensagens consecutivas do mesmo remetente)
             if historico and historico[-1].role == role:
                 historico[-1].parts[0].text += f"\n\n{texto}"
             else:
@@ -42,7 +40,8 @@ def obter_historico_por_cpf(sala_id):
         print(f"DEBUG: Erro ao buscar historico CPF: {e}", flush=True)
         return []
 
-async def perguntar_a_ia_stream(sala_id, meta_out=None):
+# NOVA LÓGICA: Adicionamos o parâmetro mensagem_sistema
+async def perguntar_a_ia_stream(sala_id, meta_out=None, mensagem_sistema=None):
     if meta_out is None:
         meta_out={}
 
@@ -54,10 +53,7 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None):
     from chatconsumidor.models import SalaDeChat, Mensagem
     sala_atual = await database_sync_to_async(SalaDeChat.objects.get)(id=sala_id)
     
-    # Busca a memória global (todas as salas daquele CPF)
     historico = await obter_historico_por_cpf(sala_id)
-    
-    # Verifica se a sala ATUAL está vazia (para dar o gatilho inicial)
     mensagens_list = await database_sync_to_async(lambda: list(Mensagem.objects.filter(sala_id=sala_id)))()
     
     contexto_gerado = ""
@@ -86,10 +82,19 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None):
         
     else:
         contexto_gerado = (
-            f"Atendendo cliente: {sala_atual.cliente_nome}. Siga as diretrizes da AIWA."
+            f"Atendendo cliente: {sala_atual.cliente_nome}. Siga as diretrizes da AIWA.\n"
+            f"Caso tenha passado alguma instrução de reset informe que o procedimento pode levar alguns minutos e que este chat pode ser finalizado dentro de 3 minutos de atividade, "
+            f"Caso a conexão atual caia, só retornar e informar o mesmo numero de CPF que continuaremos com o atendimento."
         )
+
+    # NOVA LÓGICA: Injeta o "cochicho" (Aviso de Timeout) caso ele exista
+    if mensagem_sistema:
+        # Garante que a regra de "alternância" de papéis (user -> model) não quebre
+        if historico and historico[-1].role == "user":
+            historico[-1].parts[0].text += f"\n\n{mensagem_sistema}"
+        else:
+            historico.append(types.Content(role="user", parts=[types.Part.from_text(text=mensagem_sistema)]))
     
-    # FIX: Instruções ultrarígidas de formatação para evitar a "IA Muda"
     instrucao_raciocinio = (
         f"\n\n--- FORMATO OBRIGATÓRIO DE RESPOSTA ---\n"
         f"Em TODAS as suas mensagens, você DEVE estruturar sua resposta EXATAMENTE desta forma:\n\n"
@@ -108,7 +113,6 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None):
     client = genai.Client(api_key=config.api_key)
     
     try:
-        # Failsafe final para evitar erro 400 se o array ficar vazio
         if not historico:
             historico.append(types.Content(role="user", parts=[types.Part.from_text(text="Oi")]))
 
@@ -124,7 +128,7 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None):
         buffer = ""
         is_thinking = False
         raciocinio_capturado = ""
-        text_yielded = False  # Rastreador se enviamos algo pro chat
+        text_yielded = False 
 
         async for chunk in response:
             if not chunk.text: continue
@@ -147,22 +151,19 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None):
                             yield chunk_yield
                             text_yielded = True
                             buffer = buffer[-15:]
-                        break # Espera o próximo chunk da API
+                        break 
                 else:
                     end_idx = buffer.find("</raciocinio>")
                     if end_idx != -1:
-                        # Acabou de pensar! Guarda o raciocinio oculto.
                         raciocinio_capturado += buffer[:end_idx]
                         buffer = buffer[end_idx + len("</raciocinio>"):]
                         is_thinking = False
                     else:
-                        # Continua acumulando o pensamento oculto
                         if len(buffer) > 15:
                             raciocinio_capturado += buffer[:-15]
                             buffer = buffer[-15:]
-                        break # Espera o próximo chunk da API
+                        break 
 
-        # Ao fim do stream, limpa qualquer coisa que tenha sobrado no buffer
         if buffer:
             if is_thinking:
                 raciocinio_capturado += buffer
@@ -170,15 +171,12 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None):
                 yield buffer
                 text_yielded = True
 
-        # Salva o monólogo interno na nossa variável de banco de dados
         if raciocinio_capturado:
             meta_out["linha_de_raciocinio"] = raciocinio_capturado.strip()
             
-        # FIX: Failsafe. Se a IA colocar todo o texto dentro de <raciocinio> sem querer
         if not text_yielded:
             yield "Desculpe, estava analisando seus dados e acabei me perdendo. Como posso te ajudar agora?"
 
-        # --- CAPTURANDO TOKENS ---
         try:
             if hasattr(response, 'usage_metadata') and response.usage_metadata:
                 meta_out["tokens"] = {
