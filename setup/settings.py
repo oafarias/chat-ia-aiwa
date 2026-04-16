@@ -23,6 +23,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
+# CHAVE DA API TELECONTROL (Puxada do ambiente/Codespaces Secrets)
+TELECONTROL_API_KEY = os.environ.get('TELECONTROL_API_KEY', '')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 # Default to test mode when DJANGO_ENV is not explicitly defined.
 IS_TEST_MODE = os.environ.get('DJANGO_ENV', 'test').lower() == 'test'

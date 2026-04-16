@@ -1,4 +1,5 @@
 from .models import ConfiguracaoIA
+from .integracoes import buscar_os_telecontrol # <-- NOVO IMPORT
 from google import genai
 from google.genai import types
 import asyncio
@@ -40,7 +41,6 @@ def obter_historico_por_cpf(sala_id):
         print(f"DEBUG: Erro ao buscar historico CPF: {e}", flush=True)
         return []
 
-# NOVA LÓGICA: Adicionamos o parâmetro mensagem_sistema
 async def perguntar_a_ia_stream(sala_id, meta_out=None, mensagem_sistema=None):
     if meta_out is None:
         meta_out={}
@@ -58,6 +58,7 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None, mensagem_sistema=None):
     
     contexto_gerado = ""
 
+    # Lógica de Contexto Inicial
     if not mensagens_list:
         teve_anterior = len(historico) > 0
 
@@ -87,9 +88,43 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None, mensagem_sistema=None):
             f"Caso a conexão atual caia, só retornar e informar o mesmo numero de CPF que continuaremos com o atendimento."
         )
 
-    # NOVA LÓGICA: Injeta o "cochicho" (Aviso de Timeout) caso ele exista
+    # --- INÍCIO DA INTEGRAÇÃO COM A API TELECONTROL ---
+    # Nós chamamos a API sempre, pois o status da OS pode mudar enquanto o cliente conversa.
+    if sala_atual.cpf:
+        dados_telecontrol = await buscar_os_telecontrol(sala_atual.cpf)
+        
+        if dados_telecontrol:
+            # Gravamos o JSON cru no Metadados para os Admins verem e depurarem no painel
+            meta_out["api_telecontrol"] = {"status": "sucesso", "quantidade": len(dados_telecontrol), "dados": dados_telecontrol}
+            
+            # Formatação textual para injetar no cérebro da IA
+            contexto_os = "\n\n--- INFORMAÇÕES DO SISTEMA (API TELECONTROL / ORDENS DE SERVIÇO) ---\n"
+            contexto_os += "O sistema localizou as seguintes Ordens de Serviço (OS) atreladas ao CPF deste cliente:\n"
+            
+            for index, os in enumerate(dados_telecontrol):
+                contexto_os += f"\n[OS {index + 1}]\n"
+                contexto_os += f"- Número OS: {os.get('sua_os', 'N/A')} | Produto: {os.get('descricao', 'N/A')} ({os.get('marca', 'N/A')})\n"
+                contexto_os += f"- Status atual: {os.get('status_os', 'N/A')} (Aberto há {os.get('dias_aberto', 0)} dias)\n"
+                contexto_os += f"- Defeito relatado: {os.get('defeito_reclamado_descricao', 'N/A')} | Defeito constatado: {os.get('defeito_constatado', 'N/A')}\n"
+                contexto_os += f"- Abertura: {os.get('data_abertura', 'N/A')} | Fechamento: {os.get('data_fechamento', 'N/A')} | Autorizada: {os.get('codigo_posto', 'N/A')}\n"
+                
+            # INSTRUÇÃO MELHORADA COM REGRAS DE FORMATAÇÃO E TRATAMENTO DE MÚLTIPLAS OS
+            contexto_os += (
+                "\nINSTRUÇÃO OBRIGATÓRIA SOBRE AS OS: Analise as informações acima. Se for a sua primeira mensagem e houverem Ordens de Serviço, "
+                "você DEVE informar o cliente proativamente sobre o histórico de seus equipamentos. "
+                "Formate a sua resposta OBRIGATORIAMENTE usando tópicos (bullet points) e destacando o número da OS e o modelo em negrito, "
+                "por exemplo: '* **OS 12345 (Modelo XYZ):** O status atual é...'. "
+                "Se houver mais de uma OS (ex: uma antiga finalizada e uma nova em andamento para o mesmo aparelho), "
+                "liste ambas claramente para o cliente entender o cronograma. Não diga 'consultei o sistema', aja com naturalidade, "
+                "e finalize a mensagem perguntando como pode ajudá-lo hoje baseando-se nesses status."
+            )
+            
+            contexto_gerado += contexto_os
+        else:
+            meta_out["api_telecontrol"] = {"status": "sem_resultados_ou_falha"}
+    # --- FIM DA INTEGRAÇÃO ---
+
     if mensagem_sistema:
-        # Garante que a regra de "alternância" de papéis (user -> model) não quebre
         if historico and historico[-1].role == "user":
             historico[-1].parts[0].text += f"\n\n{mensagem_sistema}"
         else:
