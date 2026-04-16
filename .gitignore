@@ -186,4 +186,4 @@ cython_debug/
 pyvenv.cfg
 pip-selfcheck.json
 
-# End of https://www.toptal.com/developers/gitignore/api/django,venv
+# End of https://www.toptal.com/developers/gitignore/api/django,venvstaticfiles/
