@@ -14,7 +14,7 @@ constantly==23.10.4
 cryptography==46.0.6
 daphne==4.2.1
 distro==1.9.0
-Django==6.0.3
+Django==5.1.15
 google-auth==2.49.1
 google-genai==1.70.0
 h11==0.16.0
@@ -33,6 +33,7 @@ pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
 pyOpenSSL==26.0.0
+python-dotenv=1.2.2
 requests==2.33.1
 service-identity==24.2.0
 setuptools==82.0.1
