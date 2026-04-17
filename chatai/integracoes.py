@@ -1,44 +1,36 @@
-import httpx
-import re
-from django.conf import settings
+import requests
+from channels.db import database_sync_to_async
 
-async def buscar_os_telecontrol(cpf):
+@database_sync_to_async
+def buscar_os_telecontrol(cpf, token):
     """
-    Realiza uma busca assíncrona na API da Telecontrol usando o CPF do cliente.
-    Retorna uma lista de dicionários com as OSs encontradas ou uma lista vazia.
+    Consulta a API da Telecontrol para buscar Ordens de Serviço vinculadas ao CPF.
+    Agora utiliza o token (access-application-key) dinamicamente a partir do banco de dados.
     """
-    if not cpf:
+    if not token:
+        print("Aviso: Token da Telecontrol não configurado no painel Admin.")
         return []
-
-    # Remove qualquer pontuação (pontos e traços) que possa ter vindo do banco
-    cpf_limpo = re.sub(r'\D', '', str(cpf))
+        
+    url = f"https://api2.telecontrol.com.br/os/ordem/cpf/{cpf}"
     
-    url = f"https://api2.telecontrol.com.br/os/ordem/cpf/{cpf_limpo}"
-    
+    # Injeção do token vindo do Models/Admin no Header da requisição
     headers = {
         "access-env": "PRODUCTION",
-        "access-application-key": settings.TELECONTROL_API_KEY
+        "access-application-key": token
     }
-
+    
     try:
-        # Usamos httpx.AsyncClient para não bloquear a thread principal do Channels.
-        # Definimos um timeout de 5 segundos. Se a API deles cair, o chat não cai.
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(url, headers=headers)
+        # Adicionado um timeout por segurança para não travar o chat se a API externa cair
+        resp = requests.get(url, headers=headers, timeout=10)
+        
+        if resp.status_code == 200:
+            dados = resp.json()
+            # Retorna a lista de OSs ou uma lista vazia se a chave "os" não existir
+            return dados.get("os", [])
+        else:
+            print(f"Aviso API Telecontrol: Status {resp.status_code} - {resp.text}")
+            return []
             
-            if response.status_code == 200:
-                dados = response.json()
-                # Retorna a lista que está dentro da chave 'os', ou [] se não existir
-                return dados.get("os", [])
-            else:
-                print(f"DEBUG: API Telecontrol retornou erro HTTP {response.status_code}", flush=True)
-                return []
-                
-    except httpx.RequestError as e:
-        # Pega timeouts, problemas de DNS ou recusas de conexão
-        print(f"DEBUG: Falha de conexão com a API Telecontrol: {e}", flush=True)
-        return []
     except Exception as e:
-        # Pega erros de Parsing (JSON quebrado, etc)
-        print(f"DEBUG: Erro inesperado ao processar API Telecontrol: {e}", flush=True)
+        print(f"Erro de conexão com a API Telecontrol: {e}")
         return []
