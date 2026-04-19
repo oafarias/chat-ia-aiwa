@@ -1,19 +1,16 @@
-from .models import ConfiguracaoIA
-from .integracoes import buscar_os_telecontrol
+from .models import ConfiguracaoIA, ApiExterna
+from .integracoes import buscar_os_telecontrol, buscar_protocolos_telecontrol
 import asyncio
+import json # <-- ADICIONADO AQUI
 from channels.db import database_sync_to_async
 from django.db.models import Q
 
 @database_sync_to_async
 def obter_configuracao_ativa():
-    return ConfiguracaoIA.objects.filter(is_active=True).first()
+    return ConfiguracaoIA.objects.select_related('api_os_vinculada', 'api_protocolo_vinculada').filter(is_active=True).first()
 
 @database_sync_to_async
 def obter_historico_por_cpf(sala_id):
-    """
-    Agora retorna um formato neutro de dicionário que serve como base 
-    para ser traduzido depois para qualquer IA.
-    """
     from chatconsumidor.models import Mensagem, SalaDeChat
     try:
         sala_atual = SalaDeChat.objects.get(id=sala_id)
@@ -43,10 +40,6 @@ def obter_historico_por_cpf(sala_id):
         return []
 
 async def _gerar_stream_ia(config, instrucao_sistema_completa, historico_neutro):
-    """
-    Esta função mágica isola os SDKs. Ela recebe a configuração e o histórico neutro,
-    conecta no provedor correto e faz o yield (cospe) apenas os blocos de texto.
-    """
     try:
         if config.provedor == 'gemini':
             from google import genai
@@ -119,78 +112,82 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None, mensagem_sistema=None):
     
     contexto_gerado = ""
 
-    # Lógica de Contexto Inicial
+    fallback_novo = "O número do protocolo DESTA nova sessão é: {protocolo}. O cliente informou no formulário que se chama '{nome}'.\n\nEste é um CLIENTE NOVO. Dê as boas-vindas à AIWA, informe o número do protocolo dele e pergunte como você pode ajudá-lo hoje."
+    fallback_retorno = "O número do protocolo DESTA nova sessão é: {protocolo}. O cliente informou no formulário que se chama '{nome}'.\n\nEste cliente JÁ TEM HISTÓRICO (leia as mensagens anteriores). Faça uma saudação de retorno contextualizada, informe o novo protocolo e pergunte se ele quer dar continuidade ao caso anterior."
+    fallback_andamento = "Atendendo cliente: {nome}. Siga as diretrizes da AIWA.\nCaso tenha passado alguma instrução de reset informe que o procedimento pode levar alguns minutos e que este chat pode ser finalizado dentro de 3 minutos de atividade. Caso a conexão atual caia, só retornar e informar o mesmo numero de CPF que continuaremos com o atendimento."
+    
     if not mensagens_list:
         teve_anterior = len(historico) > 0
-
-        contexto_gerado = (
-            f"O número do protocolo DESTA nova sessão é: {sala_atual.protocolo}. "
-            f"O cliente informou no formulário que se chama '{sala_atual.cliente_nome}'.\n\n"
-        )
         
         if teve_anterior:
-            contexto_gerado += (
-                "Este cliente JÁ TEM HISTÓRICO (leia as mensagens anteriores). "
-                "Faça uma saudação de retorno contextualizada, informe o novo protocolo "
-                "e pergunte se ele quer dar continuidade ao caso anterior."
+            template_retorno = getattr(config, 'prompt_saudacao_retorno', fallback_retorno)
+            contexto_gerado = template_retorno.format(
+                protocolo=sala_atual.protocolo,
+                nome=sala_atual.cliente_nome
             )
         else:
-            contexto_gerado += (
-                "Este é um CLIENTE NOVO. Dê as boas-vindas à AIWA, informe o número "
-                "do protocolo dele e pergunte como você pode ajudá-lo hoje."
+            template_novo = getattr(config, 'prompt_saudacao_nova', fallback_novo)
+            contexto_gerado = template_novo.format(
+                protocolo=sala_atual.protocolo,
+                nome=sala_atual.cliente_nome
             )
         
         historico.append({"role": "user", "content": "[SISTEMA]: O cliente acabou de entrar no chat. Inicie o atendimento."})
         
     else:
-        contexto_gerado = (
-            f"Atendendo cliente: {sala_atual.cliente_nome}. Siga as diretrizes da AIWA.\n"
-            f"Caso tenha passado alguma instrução de reset informe que o procedimento pode levar alguns minutos e que este chat pode ser finalizado dentro de 3 minutos de atividade, "
-            f"Caso a conexão atual caia, só retornar e informar o mesmo numero de CPF que continuaremos com o atendimento."
+        template_andamento = getattr(config, 'prompt_andamento', fallback_andamento)
+        contexto_gerado = template_andamento.format(
+            nome=sala_atual.cliente_nome
         )
 
-    # --- INÍCIO DA INTEGRAÇÃO COM A API TELECONTROL ---
+    # =========================================================
+    # INTEGRAÇÕES DINÂMICAS DE APIS EXTERNAS
+    # =========================================================
     if sala_atual.cpf:
-        # Puxa o token configurado no Admin, protegendo contra getattr/NoneType
-        token_telecontrol = getattr(config, 'token_telecontrol', None)
-        
-        if token_telecontrol:
-            dados_telecontrol = await buscar_os_telecontrol(sala_atual.cpf, token_telecontrol)
-            
-            if dados_telecontrol:
-                meta_out["api_telecontrol"] = {"status": "sucesso", "quantidade": len(dados_telecontrol), "dados": dados_telecontrol}
+        # --- 1. INTEGRAÇÃO: ORDENS DE SERVIÇO (OS) ---
+        api_os = config.api_os_vinculada
+        if api_os and api_os.is_active:
+            dados_os_brutos = await buscar_os_telecontrol(sala_atual.cpf, api_os)
+            if dados_os_brutos:
+                dados_os_filtrados = [
+                    os for os in dados_os_brutos 
+                    if str(os.get('marca', '')).strip().upper() == 'AIWA'
+                ]
                 
-                contexto_os = "\n\n--- INFORMAÇÕES DO SISTEMA (API TELECONTROL / ORDENS DE SERVIÇO) ---\n"
-                contexto_os += "O sistema localizou as seguintes Ordens de Serviço (OS) atreladas ao CPF deste cliente:\n"
-                
-                for index, os in enumerate(dados_telecontrol):
-                    contexto_os += f"\n[OS {index + 1}] | Tipo de Atendimento: {os.get('descricao_tipo_atendimento', 'N/A')} |"
-                    contexto_os += f"- Número OS: {os.get('sua_os', 'N/A')} | Produto: {os.get('descricao', 'N/A')} ({os.get('marca', 'N/A')})\n | Numero de Serie: {os.get('serie', 'N/A')} |"
-                    contexto_os += f"- Status atual: {os.get('status_os', 'N/A')} (Aberto há {os.get('dias_aberto', 0)} dias)\n"
-                    contexto_os += f"- Defeito relatado: {os.get('defeito_reclamado_descricao', 'N/A')} | Defeito constatado: {os.get('defeito_constatado', 'N/A')}\n"
-                    contexto_os += f"- Abertura: {os.get('data_abertura', 'N/A')} | Fechamento: {os.get('data_fechamento', 'N/A')} | Autorizada: {os.get('nome', 'N/A')}\n"
+                if dados_os_filtrados:
+                    meta_out["api_os"] = {"status": "sucesso", "quantidade": len(dados_os_filtrados)}
                     
-                contexto_os += (
-                    "\nINSTRUÇÃO OBRIGATÓRIA SOBRE AS OS: Analise as informações acima. Se for a sua primeira mensagem e houverem Ordens de Serviço, "
-                    "você DEVE informar o cliente proativamente sobre o histórico de seus equipamentos. "
-                    "Formate a sua resposta OBRIGATORIAMENTE usando tópicos (bullet points) e destacando o número da OS e o modelo em negrito, "
-                    "por exemplo: '* **OS 12345 (Modelo XYZ):** O status atual é...'.\n"
-                    "Se o produto estiver com status 'Aguardando Retirada' e o Tipo de Atendimento for igual a 'Atendimento Domicílio', "
-                    "Informe que o produto será devolvido em breve e o agendamento de devolução deve ser feito diretamente com a Assistencia.\n"
-                    "Se o produto estiver com status 'Aguardando Retirada' e o Tipo de Atendimento for igual a 'Atendimento Balcao', "
-                    "informe que o produto está pronto e pode ser retirado na assistencia. "
-                    "Se houver mais de uma OS de mesmo Produto e Numero de Serie informe apenas a ultima OS, "
-                    "a menos que o consumidor informe sobre a outra, aja com naturalidade.\n"
-                    "Caso o consumidor pergunte o que foi feito em seu produto, informe que voce não tem acesso as informacões tecnicas "
-                    "e finalize a mensagem perguntando como pode ajudá-lo hoje baseando-se nesses status."
-                )
-                
-                contexto_gerado += contexto_os
+                    lista_os_str = ""
+                    for index, os in enumerate(dados_os_filtrados):
+                        lista_os_str += f"\n[OS {index + 1}] | Tipo: {os.get('descricao_tipo_atendimento', 'N/A')} |"
+                        lista_os_str += f" Número: {os.get('sua_os', 'N/A')} | Produto: {os.get('descricao', 'N/A')} |"
+                        lista_os_str += f" Status: {os.get('status_os', 'N/A')} | Abertura: {os.get('data_abertura', 'N/A')}\n"
+                    
+                    fallback_os = "\n\n--- INFORMAÇÕES DO SISTEMA (API TELECONTROL / ORDENS DE SERVIÇO) ---\nO sistema localizou as seguintes Ordens de Serviço (OS) da marca AIWA atreladas ao CPF deste cliente:\n{lista_os}\n\nINSTRUÇÃO OBRIGATÓRIA SOBRE AS OS: Analise as informações acima. Se for a sua primeira mensagem e houverem Ordens de Serviço, você DEVE informar o cliente proativamente sobre o histórico de seus equipamentos. Formate a sua resposta OBRIGATORIAMENTE usando tópicos (bullet points) e destacando o número da OS e o modelo em negrito."
+                    template_os = getattr(config, 'prompt_contexto_os', fallback_os)
+                    contexto_gerado += template_os.format(lista_os=lista_os_str)
+                else:
+                    meta_out["api_os"] = {"status": "sem_resultados_aiwa"}
             else:
-                meta_out["api_telecontrol"] = {"status": "sem_resultados_ou_falha"}
-        else:
-            meta_out["api_telecontrol"] = {"status": "chave_api_ausente_no_admin"}
-    # --- FIM DA INTEGRAÇÃO ---
+                meta_out["api_os"] = {"status": "vazio"}
+
+        # --- 2. INTEGRAÇÃO: PROTOCOLOS ---
+        api_protocolo = config.api_protocolo_vinculada
+        if api_protocolo and api_protocolo.is_active:
+            dados_protocolo = await buscar_protocolos_telecontrol(sala_atual.cpf, api_protocolo)
+            if dados_protocolo:
+                meta_out["api_protocolo"] = {"status": "sucesso", "quantidade": len(dados_protocolo)}
+                
+                # A MÁGICA ACONTECE AQUI: Devolvemos o JSON puro para a IA ler as chaves que ela quiser!
+                lista_prot_str = json.dumps(dados_protocolo, ensure_ascii=False, indent=2)
+                
+                fallback_prot = "\n\n--- INFORMAÇÕES DO SISTEMA (PROTOCOLOS ANTERIORES) ---\nO sistema localizou os seguintes protocolos atrelados a este CPF:\n{lista_protocolos}\n\nINSTRUÇÃO: Caso o cliente questione sobre atendimentos ou protocolos anteriores, utilize as informações acima."
+                template_prot = getattr(config, 'prompt_contexto_protocolo', fallback_prot)
+                contexto_gerado += template_prot.format(lista_protocolos=lista_prot_str)
+            else:
+                meta_out["api_protocolo"] = {"status": "vazio"}
+
+    # =========================================================
 
     if mensagem_sistema:
         if historico and historico[-1]['role'] == "user":
@@ -198,14 +195,9 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None, mensagem_sistema=None):
         else:
             historico.append({"role": "user", "content": mensagem_sistema})
     
-    instrucao_raciocinio = (
-        f"\n\n--- FORMATO OBRIGATÓRIO DE RESPOSTA ---\n"
-        f"Em TODAS as suas mensagens, você DEVE estruturar sua resposta EXATAMENTE desta forma:\n\n"
-        f"<raciocinio>\n"
-        f"Escreva sua análise do contexto e planejamento aqui.\n"
-        f"</raciocinio>\n"
-        f"Escreva a mensagem final que o cliente vai ler aqui. (NUNCA coloque a mensagem do cliente dentro da tag de raciocínio)."
-    )
+    # Prompt agressivo para forçar a IA a iniciar com <raciocinio>
+    fallback_raciocinio = "\n\n--- FORMATO OBRIGATÓRIO DE RESPOSTA ---\nEm TODAS as suas mensagens, a sua primeiríssima palavra deve ser a tag <raciocinio>. NÃO ESCREVA NADA antes da tag.\n\n<raciocinio>\nEscreva sua análise do contexto e planejamento aqui.\n</raciocinio>\nEscreva a mensagem final que o cliente vai ler aqui. (NUNCA coloque a mensagem do cliente dentro da tag de raciocínio)."
+    instrucao_raciocinio = getattr(config, 'prompt_raciocinio', fallback_raciocinio)
 
     prompt_final_injetado = contexto_gerado + instrucao_raciocinio
     instrucao_sistema_completa = config.system_prompt + "\n\n--- INSTRUÇÕES DINÂMICAS DA SESSÃO ATUAL ---\n" + prompt_final_injetado
@@ -214,7 +206,6 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None, mensagem_sistema=None):
     meta_out["tamanho_historico_enviado"] = len(historico)
     meta_out["modelo_utilizado"] = config.modelo
 
-    # Garante que sempre tem pelo menos um oi para a IA responder
     if not historico:
         historico.append({"role": "user", "content": "Oi"})
 
@@ -223,7 +214,6 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None, mensagem_sistema=None):
     raciocinio_capturado = ""
     text_yielded = False 
 
-    # --- O GRANDE ROTEADOR UNIVERSAL ---
     stream_generator = _gerar_stream_ia(config, instrucao_sistema_completa, historico)
 
     async for chunk_text in stream_generator:
