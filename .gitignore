@@ -190,3 +190,5 @@ pip-selfcheck.json
 
 deploy.sh
 staticfiles
+
+.vscode
