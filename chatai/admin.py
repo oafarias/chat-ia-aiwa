@@ -8,7 +8,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.middleware.csrf import get_token
 from django import forms
 from django.utils.safestring import mark_safe
-from .models import ConfiguracaoIA, ApiExterna
+from .models import ConfiguracaoIA, ApiExterna, BaseConhecimento
 from google import genai
 from google.genai import types
 
@@ -338,3 +338,10 @@ class ApiExternaAdmin(admin.ModelAdmin):
         </html>
         """
         return HttpResponse(html)
+
+@admin.register(BaseConhecimento)
+class BaseConhecimentoAdmin(admin.ModelAdmin):
+    list_display = ('titulo', 'ativo', 'atualizado_em')
+    list_filter = ('ativo', 'criado_em')
+    search_fields = ('titulo', 'conteudo')
+    readonly_fields = ('id', 'criado_em', 'atualizado_em')

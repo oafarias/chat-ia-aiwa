@@ -1,9 +1,11 @@
 from .models import ConfiguracaoIA, ApiExterna
 from .integracoes import buscar_os_telecontrol, buscar_protocolos_telecontrol
+from .vector_db import vector_db # <-- IMPORTAÇÃO DO NOSSO BANCO VETORIAL RAG
 import asyncio
-import json # <-- ADICIONADO AQUI
+import json
 from channels.db import database_sync_to_async
 from django.db.models import Q
+from asgiref.sync import sync_to_async # <-- Necessário para rodar o ChromaDB de forma assíncrona
 
 @database_sync_to_async
 def obter_configuracao_ativa():
@@ -194,9 +196,25 @@ async def perguntar_a_ia_stream(sala_id, meta_out=None, mensagem_sistema=None):
             historico[-1]['content'] += f"\n\n{mensagem_sistema}"
         else:
             historico.append({"role": "user", "content": mensagem_sistema})
+            
+    # =========================================================
+    # INTEGRAÇÃO RAG: BUSCA SEMÂNTICA NO CHROMADB
+    # =========================================================
+    ultima_pergunta = ""
+    for msg in reversed(historico):
+        if msg.get("role") == "user" and not msg.get("content", "").startswith("[SISTEMA]"):
+            ultima_pergunta = msg.get("content", "")
+            break
+
+    if ultima_pergunta:
+        # Busca no banco de vetores de forma assíncrona para não travar o socket
+        contexto_rag = await sync_to_async(vector_db.buscar_contexto_relevante)(ultima_pergunta)
+        if contexto_rag:
+            contexto_gerado += f"\n{contexto_rag}\n"
+    # =========================================================
     
     # Prompt agressivo para forçar a IA a iniciar com <raciocinio>
-    fallback_raciocinio = "\n\n--- FORMATO OBRIGATÓRIO DE RESPOSTA ---\nEm TODAS as suas mensagens, a sua primeiríssima palavra deve ser a tag <raciocinio>. NÃO ESCREVA NADA antes da tag.\n\n<raciocinio>\nEscreva sua análise do contexto e planejamento aqui.\n</raciocinio>\nEscreva a mensagem final que o cliente vai ler aqui. (NUNCA coloque a mensagem do cliente dentro da tag de raciocínio)."
+    fallback_raciocinio = "\n\n--- FORMATO OBRIGATÓRIO DE RESPOSTA ---\nEm TODAS as suas mensagens, a sua primeiríssima palavra deve ser a tag <raciocinio>. NÃO ESCREVA NADA antes da tag.\n\n<raciocinio>\nEscreva sua análise do contexto e planejamento aqui. SE UTILIZAR A BASE DE CONHECIMENTO, liste explicitamente o 'Título' das regras que está usando.\n</raciocinio>\nEscreva a mensagem final que o cliente vai ler aqui. (NUNCA coloque a mensagem do cliente dentro da tag de raciocínio)."
     instrucao_raciocinio = getattr(config, 'prompt_raciocinio', fallback_raciocinio)
 
     prompt_final_injetado = contexto_gerado + instrucao_raciocinio

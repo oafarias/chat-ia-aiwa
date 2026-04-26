@@ -1,4 +1,6 @@
+import uuid
 from django.db import models
+from .vector_db import vector_db
 
 class ConfiguracaoIA(models.Model):
     PROVEDORES = [
@@ -118,3 +120,38 @@ class ApiExterna(models.Model):
     class Meta:
         verbose_name = "API Externa"
         verbose_name_plural = "APIs Externas"
+
+class BaseConhecimento(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    titulo = models.CharField(max_length=200, help_text="Ex: Regras de Garantia de TVs, Saudação Inicial, etc.")
+    conteudo = models.TextField(help_text="O fragmento de texto com o conhecimento que a IA deve aprender.")
+    ativo = models.BooleanField(default=True, help_text="Se desmarcado, a IA não usará este texto.")
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Base de Conhecimento"
+        verbose_name_plural = "Bases de Conhecimento"
+        ordering = ['-atualizado_em']
+
+    def __str__(self):
+        return f"{self.titulo} ({'Ativo' if self.ativo else 'Inativo'})"
+
+    # --- NOVO: Interceptando o momento de Salvar e Deletar ---
+
+    def save(self, *args, **kwargs):
+        # 1. Primeiro salvamos normalmente no banco SQL do Django
+        super().save(*args, **kwargs)
+        
+        # 2. Depois, espelhamos a mudança no Banco Vetorial
+        if self.ativo:
+            # Se estiver ativo, mandamos pra OpenAI gerar o vetor e salvamos no ChromaDB
+            vector_db.adicionar_ou_atualizar_documento(self.id, self.titulo, self.conteudo)
+        else:
+            # Se o admin desmarcou a caixinha "ativo", nós apagamos do ChromaDB pra IA não usar mais
+            vector_db.deletar_documento(self.id)
+
+    def delete(self, *args, **kwargs):
+        # Se o admin excluir o registro no Django, excluímos do vetor também
+        vector_db.deletar_documento(self.id)
+        super().delete(*args, **kwargs)
