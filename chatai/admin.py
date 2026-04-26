@@ -8,7 +8,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.middleware.csrf import get_token
 from django import forms
 from django.utils.safestring import mark_safe
-from .models import ConfiguracaoIA, ApiExterna
+from .models import ConfiguracaoIA, ApiExterna, BaseConhecimento
 from google import genai
 from google.genai import types
 
@@ -142,6 +142,7 @@ class ConfiguracaoIAForm(forms.ModelForm):
         model = ConfiguracaoIA
         fields = '__all__'
         widgets = {
+            'prompt_orquestrador': MarkdownToggleWidget(), # Adicionado aqui
             'prompt_saudacao_nova': MarkdownToggleWidget(),
             'prompt_saudacao_retorno': MarkdownToggleWidget(),
             'prompt_andamento': MarkdownToggleWidget(),
@@ -170,7 +171,7 @@ class ConfiguracaoIAAdmin(admin.ModelAdmin):
             'fields': ('provedor', 'modelo', 'api_key', 'system_prompt')
         }),
         ('Prompts de Contexto (Dinâmicos)', {
-            'fields': ('prompt_saudacao_nova', 'prompt_saudacao_retorno', 'prompt_andamento', 'prompt_raciocinio'),
+            'fields': ('prompt_orquestrador', 'prompt_saudacao_nova', 'prompt_saudacao_retorno', 'prompt_andamento', 'prompt_raciocinio'),
             'description': 'Textos injetados dinamicamente dependendo do status do chat. Não remova as variáveis entre chaves {}.'
         }),
         ('Integrações (APIs Externas)', {
@@ -338,3 +339,10 @@ class ApiExternaAdmin(admin.ModelAdmin):
         </html>
         """
         return HttpResponse(html)
+
+@admin.register(BaseConhecimento)
+class BaseConhecimentoAdmin(admin.ModelAdmin):
+    list_display = ('titulo', 'ativo', 'atualizado_em')
+    list_filter = ('ativo', 'criado_em')
+    search_fields = ('titulo', 'conteudo')
+    readonly_fields = ('id', 'criado_em', 'atualizado_em')
