@@ -142,6 +142,7 @@ class ConfiguracaoIAForm(forms.ModelForm):
         model = ConfiguracaoIA
         fields = '__all__'
         widgets = {
+            'prompt_orquestrador': MarkdownToggleWidget(), # Adicionado aqui
             'prompt_saudacao_nova': MarkdownToggleWidget(),
             'prompt_saudacao_retorno': MarkdownToggleWidget(),
             'prompt_andamento': MarkdownToggleWidget(),
@@ -170,7 +171,7 @@ class ConfiguracaoIAAdmin(admin.ModelAdmin):
             'fields': ('provedor', 'modelo', 'api_key', 'system_prompt')
         }),
         ('Prompts de Contexto (Dinâmicos)', {
-            'fields': ('prompt_saudacao_nova', 'prompt_saudacao_retorno', 'prompt_andamento', 'prompt_raciocinio'),
+            'fields': ('prompt_orquestrador', 'prompt_saudacao_nova', 'prompt_saudacao_retorno', 'prompt_andamento', 'prompt_raciocinio'),
             'description': 'Textos injetados dinamicamente dependendo do status do chat. Não remova as variáveis entre chaves {}.'
         }),
         ('Integrações (APIs Externas)', {

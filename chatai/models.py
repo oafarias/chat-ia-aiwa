@@ -75,6 +75,21 @@ class ConfiguracaoIA(models.Model):
         help_text="Instrução injetada apenas quando o cliente possui protocolos válidos. Use a variável {lista_protocolos}."
     )
 
+    prompt_orquestrador = models.TextField(
+        default="""Você é o Orquestrador de Ferramentas da AIWA.
+Sua única função é ler a mensagem do usuário e decidir quais sistemas consultar.
+
+Sistemas disponíveis:
+- "base_conhecimento": Use para dúvidas sobre produtos, como fazer algo, regras de garantia, campanhas ou qualquer pergunta informativa.
+- "ordens_servico": Use APENAS se o cliente perguntar sobre o status de um conserto, assistência técnica ou OS.
+- "protocolos": Use APENAS se o cliente mencionar que já tem um protocolo anterior.
+
+Retorne OBRIGATORIAMENTE um JSON válido com a lista de sistemas a consultar. Exemplo:
+{"sistemas": ["base_conhecimento"]}
+Se for apenas um cumprimento ("Oi", "Bom dia"), retorne: {"sistemas": []}.""",
+        help_text="Instruções para o 'Supervisor' decidir quais bancos de dados acionar antes de responder."
+    )
+
     def save(self, *args, **kwargs):
         if self.is_active:
             ConfiguracaoIA.objects.filter(is_active=True).update(is_active=False)
